@@ -2,7 +2,18 @@ package me.sdmannen.lifesteal14;
 
 import me.sdmannen.lifesteal14.data.GameDataStore;
 import me.sdmannen.lifesteal14.data.PlayerDataStore;
-import me.sdmannen.lifesteal14.game.*;
+import me.sdmannen.lifesteal14.game.GameManager;
+import me.sdmannen.lifesteal14.game.HeartGameCommand;
+import me.sdmannen.lifesteal14.game.HeartGameTabCompleter;
+import me.sdmannen.lifesteal14.game.HeartManager;
+import me.sdmannen.lifesteal14.game.JoinListener;
+import me.sdmannen.lifesteal14.game.KillRewardService;
+import me.sdmannen.lifesteal14.game.NetherListener;
+import me.sdmannen.lifesteal14.game.PlayerDeathListener;
+import me.sdmannen.lifesteal14.game.PlayerRespawnListener;
+import me.sdmannen.lifesteal14.game.PvpListener;
+import me.sdmannen.lifesteal14.game.QuitListener;
+import me.sdmannen.lifesteal14.game.ScoreboardManager;
 import org.bukkit.plugin.java.JavaPlugin;
 
 public final class Main extends JavaPlugin {
@@ -29,11 +40,12 @@ public final class Main extends JavaPlugin {
         this.killRewardService = new KillRewardService(this, heartManager, gameManager);
         this.scoreboardManager = new ScoreboardManager(this, heartManager, gameManager);
 
+        heartManager.loadAllKnownPlayersFromStore();
+        gameManager.loadPersistentState();
+
         registerCommands();
         registerListeners();
 
-        heartManager.syncAllOnlinePlayers();
-        gameManager.loadPersistentState();
         gameManager.restoreAfterRestart();
         scoreboardManager.updateAll();
 

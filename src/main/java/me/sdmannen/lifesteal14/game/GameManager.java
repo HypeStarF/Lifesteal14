@@ -18,6 +18,7 @@ import java.util.UUID;
 public class GameManager {
 
     private static final long GAME_END_SECONDS = 14L * 24L * 60L * 60L;
+    private static final long DAY_SECONDS = 24L * 60L * 60L;
 
     private final JavaPlugin plugin;
     private final HeartManager heartManager;
@@ -41,6 +42,8 @@ public class GameManager {
     private long netherSecondsRemaining;
     private long gameEndSecondsRemaining;
 
+    private int autosaveTickCounter;
+
     public GameManager(JavaPlugin plugin, HeartManager heartManager, GameDataStore gameDataStore) {
         this.plugin = plugin;
         this.heartManager = heartManager;
@@ -49,9 +52,12 @@ public class GameManager {
         this.gameState = GameState.WAITING;
         this.netherOpen = false;
         this.winnerName = null;
+        this.autosaveTickCounter = 0;
     }
 
     public void loadPersistentState() {
+        gameDataStore.reload();
+
         try {
             this.gameState = GameState.valueOf(gameDataStore.getGameState());
         } catch (IllegalArgumentException ex) {
@@ -88,7 +94,9 @@ public class GameManager {
     public void restoreAfterRestart() {
         switch (gameState) {
             case WAITING -> {
-                if (!lobbyCageManager.isCreated()) {
+                if (lobbyCageManager.isCreated() && lobbyCageManager.getWorld() != null) {
+                    lobbyCageManager.rebuildCage();
+                } else {
                     lobbyCageManager.createCage();
                     saveState();
                 }
@@ -97,11 +105,16 @@ public class GameManager {
                     prepareWaitingPlayer(player);
                 }
             }
+
             case GRACE, RUNNING -> {
                 for (Player player : Bukkit.getOnlinePlayers()) {
-                    unfreezePlayer(player);
                     heartManager.loadPlayer(player);
-                    if (!heartManager.isEliminated(player)) {
+                    unfreezePlayer(player);
+
+                    if (heartManager.isEliminated(player)) {
+                        heartManager.syncPlayer(player);
+                    } else {
+                        player.setGameMode(GameMode.SURVIVAL);
                         player.setInvulnerable(false);
                     }
                 }
@@ -123,10 +136,12 @@ public class GameManager {
 
                 startMainTimerLoop();
             }
+
             case ENDED -> {
                 for (Player player : Bukkit.getOnlinePlayers()) {
                     heartManager.loadPlayer(player);
                     freezePlayer(player);
+
                     if (winnerName != null) {
                         player.sendTitle("§6§lVINNARE", "§f" + winnerName, 10, 80, 20);
                     }
@@ -138,6 +153,8 @@ public class GameManager {
     public void initializeLobby() {
         if (!lobbyCageManager.isCreated()) {
             lobbyCageManager.createCage();
+        } else {
+            lobbyCageManager.rebuildCage();
         }
 
         for (Player player : Bukkit.getOnlinePlayers()) {
@@ -152,7 +169,10 @@ public class GameManager {
             if (!lobbyCageManager.isCreated()) {
                 lobbyCageManager.createCage();
                 saveState();
+            } else {
+                lobbyCageManager.rebuildCage();
             }
+
             prepareWaitingPlayer(player);
             return;
         }
@@ -160,6 +180,7 @@ public class GameManager {
         if (gameState == GameState.ENDED) {
             heartManager.loadPlayer(player);
             freezePlayer(player);
+
             if (winnerName != null) {
                 player.sendTitle("§6§lVINNARE", "§f" + winnerName, 10, 80, 20);
             }
@@ -168,9 +189,15 @@ public class GameManager {
 
         heartManager.loadPlayer(player);
         unfreezePlayer(player);
-        if (!heartManager.isEliminated(player)) {
+
+        if (heartManager.isEliminated(player)) {
+            heartManager.syncPlayer(player);
+        } else {
+            player.setGameMode(GameMode.SURVIVAL);
             player.setInvulnerable(false);
         }
+
+        updateTimerBossBar();
     }
 
     private void prepareWaitingPlayer(Player player) {
@@ -192,20 +219,23 @@ public class GameManager {
         winnerName = null;
         gameState = GameState.GRACE;
         netherOpen = false;
+        autosaveTickCounter = 0;
 
         graceSecondsRemaining = plugin.getConfig().getInt("timers.grace-hours", 1) * 60 * 60;
         revealIntervalSeconds = plugin.getConfig().getInt("timers.reveal-interval-minutes", 60) * 60;
         secondsUntilReveal = revealIntervalSeconds;
-        netherSecondsRemaining = plugin.getConfig().getLong("timers.nether-days", 8L) * 24L * 60L * 60L;
+        netherSecondsRemaining = plugin.getConfig().getLong("timers.nether-days", 8L) * DAY_SECONDS;
         gameEndSecondsRemaining = GAME_END_SECONDS;
 
         lobbyCageManager.removeCage();
 
         for (Player player : Bukkit.getOnlinePlayers()) {
             unfreezePlayer(player);
+
             if (!heartManager.isEliminated(player)) {
                 player.setGameMode(GameMode.SURVIVAL);
             }
+
             player.setInvulnerable(false);
         }
 
@@ -318,8 +348,25 @@ public class GameManager {
                 netherSecondsRemaining--;
             }
 
+            long previousGameEndSeconds = gameEndSecondsRemaining;
+
             if (isActive() && gameEndSecondsRemaining > 0) {
                 gameEndSecondsRemaining--;
+            }
+
+            if (isActive()
+                    && previousGameEndSeconds > gameEndSecondsRemaining
+                    && gameEndSecondsRemaining > 0
+                    && gameEndSecondsRemaining < GAME_END_SECONDS
+                    && gameEndSecondsRemaining % DAY_SECONDS == 0) {
+
+                int restoredPlayers = heartManager.restoreAllTemporaryPveHearts();
+
+                if (restoredPlayers > 0) {
+                    Bukkit.broadcastMessage("§aGlobal PvE-regeneration aktiverades. Alla temporärt förlorade PvE-hjärtan har återställts.");
+                } else {
+                    Bukkit.broadcastMessage("§aGlobal PvE-regeneration aktiverades. Inga PvE-hjärtan behövde återställas.");
+                }
             }
 
             if (gameState == GameState.RUNNING && canRunRevealCountdown()) {
@@ -332,11 +379,21 @@ public class GameManager {
             }
 
             updateTimerBossBar();
-            saveState();
+
+            autosaveTickCounter++;
+            if (autosaveTickCounter >= 5) {
+                autosaveTickCounter = 0;
+                saveState();
+            }
         }, 20L, 20L);
     }
 
     private void createTimerBossBar() {
+        if (timerBossBar != null) {
+            timerBossBar.removeAll();
+            timerBossBar.setVisible(false);
+        }
+
         timerBossBar = Bukkit.createBossBar("§eGrace", BarColor.YELLOW, BarStyle.SOLID);
         timerBossBar.setVisible(true);
     }
@@ -353,12 +410,14 @@ public class GameManager {
         }
 
         if (gameState == GameState.WAITING) {
+            timerBossBar.setColor(BarColor.YELLOW);
             timerBossBar.setTitle("§7Väntar på start");
             timerBossBar.setProgress(1.0D);
             return;
         }
 
         if (gameState == GameState.ENDED) {
+            timerBossBar.setColor(BarColor.YELLOW);
             timerBossBar.setTitle("§6Spelet är slut");
             timerBossBar.setProgress(1.0D);
             return;
@@ -412,7 +471,7 @@ public class GameManager {
         }
 
         Player player = Bukkit.getPlayer(leaderUuid);
-        if (player == null || !player.isOnline()) {
+        if (player == null || !player.isOnline() || heartManager.isEliminated(player)) {
             return null;
         }
 
@@ -566,6 +625,25 @@ public class GameManager {
         }
 
         return formatClock(secondsUntilReveal);
+    }
+
+    public String getNextPveRegenDisplay() {
+        if (gameState == GameState.WAITING) {
+            return "Ej startat";
+        }
+
+        if (gameState == GameState.ENDED) {
+            return "Av";
+        }
+
+        if (gameEndSecondsRemaining <= DAY_SECONDS) {
+            return "Ingen";
+        }
+
+        long remainder = gameEndSecondsRemaining % DAY_SECONDS;
+        long untilNext = remainder == 0L ? DAY_SECONDS : remainder;
+
+        return formatLongTime(untilNext);
     }
 
     public String getNetherDisplay() {

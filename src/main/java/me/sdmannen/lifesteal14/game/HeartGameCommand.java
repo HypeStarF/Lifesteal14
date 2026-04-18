@@ -153,14 +153,15 @@ public class HeartGameCommand implements CommandExecutor {
                     return true;
                 }
 
-                heartManager.loadPlayer(target);
+                heartManager.reloadPlayerFromDisk(target);
                 scoreboardManager.updateAll();
-                sender.sendMessage("§aLaddade om " + target.getName() + " från cache/datafil.");
+                sender.sendMessage("§aLaddade om " + target.getName() + " från disk.");
             }
 
             case "saveall" -> {
                 heartManager.saveAll();
-                sender.sendMessage("§aSparade all spelar-data.");
+                gameManager.saveState();
+                sender.sendMessage("§aSparade all spelar-data och game state.");
             }
 
             case "restorepve" -> {
@@ -280,6 +281,7 @@ public class HeartGameCommand implements CommandExecutor {
         sender.sendMessage("§eRunning: §f" + gameManager.isRunning());
         sender.sendMessage("§eNether open: §f" + gameManager.isNetherOpen());
         sender.sendMessage("§eReveal display: §f" + gameManager.getRevealDisplay());
+        sender.sendMessage("§ePvE regen display: §f" + gameManager.getNextPveRegenDisplay());
         sender.sendMessage("§eNether display: §f" + gameManager.getNetherDisplay());
         sender.sendMessage("§eGame ends display: §f" + gameManager.getGameEndDisplay());
 
@@ -329,10 +331,10 @@ public class HeartGameCommand implements CommandExecutor {
         sender.sendMessage("§eGameMode: §f" + target.getGameMode());
         sender.sendMessage("§eInvulnerable: §f" + target.isInvulnerable());
         sender.sendMessage("§eHealth: §f" + target.getHealth());
-        sender.sendMessage("§eMax health attr: §f" +
-                (target.getAttribute(org.bukkit.attribute.Attribute.MAX_HEALTH) != null
-                        ? target.getAttribute(org.bukkit.attribute.Attribute.MAX_HEALTH).getBaseValue()
-                        : "null"));
+        sender.sendMessage("§eMax health attr: §f"
+                + (target.getAttribute(org.bukkit.attribute.Attribute.MAX_HEALTH) != null
+                ? target.getAttribute(org.bukkit.attribute.Attribute.MAX_HEALTH).getBaseValue()
+                : "null"));
         sender.sendMessage("§eFood: §f" + target.getFoodLevel());
         sender.sendMessage("§eWalk speed: §f" + target.getWalkSpeed());
         sender.sendMessage("§eFly speed: §f" + target.getFlySpeed());
@@ -359,6 +361,7 @@ public class HeartGameCommand implements CommandExecutor {
             return null;
         }
     }
+
     private String formatLocation(Location location) {
         if (location == null || location.getWorld() == null) {
             return "null";

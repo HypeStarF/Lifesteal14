@@ -3,6 +3,7 @@ package me.sdmannen.lifesteal14.game;
 import me.sdmannen.lifesteal14.Main;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
+import org.bukkit.scheduler.BukkitTask;
 import org.bukkit.scoreboard.DisplaySlot;
 import org.bukkit.scoreboard.Objective;
 import org.bukkit.scoreboard.Scoreboard;
@@ -17,6 +18,8 @@ public class ScoreboardManager {
     private final HeartManager heartManager;
     private final GameManager gameManager;
 
+    private BukkitTask updateTask;
+
     public ScoreboardManager(Main plugin, HeartManager heartManager, GameManager gameManager) {
         this.plugin = plugin;
         this.heartManager = heartManager;
@@ -26,10 +29,14 @@ public class ScoreboardManager {
     }
 
     private void startUpdater() {
-        Bukkit.getScheduler().runTaskTimer(plugin, this::updateAll, 20L, 20L);
+        updateTask = Bukkit.getScheduler().runTaskTimer(plugin, this::updateAll, 20L, 20L);
     }
 
     public void shutdown() {
+        if (updateTask != null) {
+            updateTask.cancel();
+            updateTask = null;
+        }
     }
 
     public void updateAll() {
@@ -47,22 +54,23 @@ public class ScoreboardManager {
         LeaderData mostKills = getMostKills();
         LeaderData lowest = getLowestHearts();
 
-        setLine(objective, "§7State: §f" + gameManager.getGameState().name(), 12);
-        setLine(objective, "§6Reveal: §f" + gameManager.getRevealDisplay(), 11);
-        setLine(objective, "§cNether: §f" + gameManager.getNetherDisplay(), 10);
-        setLine(objective, "§aGame ends: §f" + gameManager.getGameEndDisplay(), 9);
+        setLine(objective, "§7State: §f" + gameManager.getGameState().name(), 14);
+        setLine(objective, "§6Reveal: §f" + gameManager.getRevealDisplay(), 13);
+        setLine(objective, "§aPvE regen: §f" + gameManager.getNextPveRegenDisplay(), 12);
+        setLine(objective, "§cNether: §f" + gameManager.getNetherDisplay(), 11);
+        setLine(objective, "§bGame ends: §f" + gameManager.getGameEndDisplay(), 10);
 
-        setLine(objective, " ", 8);
-        setLine(objective, "§eFlest hjärtan:", 7);
-        setLine(objective, formatLeaderLine(highest, LeaderType.HEARTS), 6);
+        setLine(objective, " ", 9);
+        setLine(objective, "§eFlest hjärtan:", 8);
+        setLine(objective, formatLeaderLine(highest, LeaderType.HEARTS), 7);
 
-        setLine(objective, "  ", 5);
-        setLine(objective, "§cFlest kills:", 4);
-        setLine(objective, formatLeaderLine(mostKills, LeaderType.KILLS), 3);
+        setLine(objective, "  ", 6);
+        setLine(objective, "§cFlest kills:", 5);
+        setLine(objective, formatLeaderLine(mostKills, LeaderType.KILLS), 4);
 
-        setLine(objective, "   ", 2);
-        setLine(objective, "§bMinst hjärtan: ", 1);
-        setLine(objective, formatLeaderLine(lowest, LeaderType.HEARTS), 0);
+        setLine(objective, "   ", 3);
+        setLine(objective, "§bMinst hjärtan:", 2);
+        setLine(objective, formatLeaderLine(lowest, LeaderType.HEARTS), 1);
 
         player.setScoreboard(scoreboard);
     }
@@ -141,7 +149,7 @@ public class ScoreboardManager {
         List<UUID> winners = new ArrayList<>();
 
         for (UUID uuid : all) {
-            if (heartManager.isEliminated(uuid)) {
+            if (heartManager.isPermanentlyEliminated(uuid)) {
                 continue;
             }
 
@@ -169,7 +177,7 @@ public class ScoreboardManager {
         List<UUID> losers = new ArrayList<>();
 
         for (UUID uuid : all) {
-            if (heartManager.isEliminated(uuid)) {
+            if (heartManager.isPermanentlyEliminated(uuid)) {
                 continue;
             }
 
@@ -197,7 +205,7 @@ public class ScoreboardManager {
         List<UUID> winners = new ArrayList<>();
 
         for (UUID uuid : all) {
-            if (heartManager.isEliminated(uuid)) {
+            if (heartManager.isPermanentlyEliminated(uuid)) {
                 continue;
             }
 

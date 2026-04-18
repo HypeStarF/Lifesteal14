@@ -1,11 +1,14 @@
 package me.sdmannen.lifesteal14.data;
 
+import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import java.io.File;
 import java.io.IOException;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.UUID;
 
 public class PlayerDataStore {
@@ -64,6 +67,24 @@ public class PlayerDataStore {
 
     public void setKills(UUID uuid, int kills) {
         config.set("players." + uuid + ".kills", kills);
+    }
+
+    public Set<UUID> getAllKnownPlayerUuids() {
+        Set<UUID> uuids = new HashSet<>();
+        ConfigurationSection playersSection = config.getConfigurationSection("players");
+
+        if (playersSection == null) {
+            return uuids;
+        }
+
+        for (String key : playersSection.getKeys(false)) {
+            try {
+                uuids.add(UUID.fromString(key));
+            } catch (IllegalArgumentException ignored) {
+            }
+        }
+
+        return uuids;
     }
 
     public void save() {

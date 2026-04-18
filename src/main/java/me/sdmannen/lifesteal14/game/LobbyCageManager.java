@@ -39,6 +39,15 @@ public class LobbyCageManager {
 
         center = new Location(world, centerX + 0.5, floorY + 1.0, centerZ + 0.5);
 
+        rebuildCage();
+        created = true;
+    }
+
+    public void rebuildCage() {
+        if (world == null) {
+            return;
+        }
+
         for (int x = minX; x <= maxX; x++) {
             for (int y = minY; y <= maxY; y++) {
                 for (int z = minZ; z <= maxZ; z++) {
