@@ -1,10 +1,13 @@
 package me.sdmannen.lifesteal14.game;
 
-
+import org.bukkit.entity.Entity;
+import org.bukkit.entity.Player;
+import org.bukkit.entity.Projectile;
+import org.bukkit.entity.TNTPrimed;
+import org.bukkit.entity.Tameable;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.entity.EntityDamageByEntityEvent;
-import org.bukkit.entity.Player;
 
 public class PvpListener implements Listener {
 
@@ -20,13 +23,37 @@ public class PvpListener implements Listener {
             return;
         }
 
-        if (!(event.getDamager() instanceof Player attacker)) {
+        Player attacker = getResponsiblePlayer(event.getDamager());
+        if (attacker == null) {
             return;
         }
 
         if (gameManager.isGracePeriod()) {
             event.setCancelled(true);
-            attacker.sendMessage("§cPvP är avstängt under grace period.");
+
+            if (!attacker.getUniqueId().equals(victim.getUniqueId())) {
+                attacker.sendMessage("§cPvP is turned off during the grace period.");
+            }
         }
+    }
+
+    private Player getResponsiblePlayer(Entity damager) {
+        if (damager instanceof Player player) {
+            return player;
+        }
+
+        if (damager instanceof Projectile projectile && projectile.getShooter() instanceof Player player) {
+            return player;
+        }
+
+        if (damager instanceof TNTPrimed tnt && tnt.getSource() instanceof Player player) {
+            return player;
+        }
+
+        if (damager instanceof Tameable tameable && tameable.getOwner() instanceof Player player) {
+            return player;
+        }
+
+        return null;
     }
 }

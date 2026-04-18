@@ -7,7 +7,6 @@ import org.bukkit.attribute.Attribute;
 import org.bukkit.attribute.AttributeInstance;
 import org.bukkit.entity.Player;
 
-
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
@@ -30,9 +29,13 @@ public class HeartManager {
     public void loadPlayer(Player player) {
         UUID uuid = player.getUniqueId();
 
-        heartsCache.put(uuid, dataStore.getHearts(uuid, DEFAULT_HEARTS));
-        eliminatedCache.put(uuid, dataStore.isEliminated(uuid));
-        killsCache.put(uuid, dataStore.getKills(uuid));
+        int hearts = dataStore.getHearts(uuid, DEFAULT_HEARTS);
+        boolean eliminated = dataStore.isEliminated(uuid) || hearts <= 0;
+        int kills = dataStore.getKills(uuid);
+
+        heartsCache.put(uuid, hearts);
+        eliminatedCache.put(uuid, eliminated);
+        killsCache.put(uuid, kills);
 
         syncPlayer(player);
     }
@@ -64,10 +67,7 @@ public class HeartManager {
         UUID uuid = player.getUniqueId();
 
         heartsCache.put(uuid, clamped);
-
-        if (clamped <= 0) {
-            eliminatedCache.put(uuid, true);
-        }
+        eliminatedCache.put(uuid, clamped <= 0);
 
         syncPlayer(player);
         savePlayer(player);
@@ -111,12 +111,13 @@ public class HeartManager {
             heartsCache.put(uuid, dataStore.getHearts(uuid, DEFAULT_HEARTS));
         }
 
-        if (!eliminatedCache.containsKey(uuid)) {
-            eliminatedCache.put(uuid, dataStore.isEliminated(uuid));
-        }
-
         if (!killsCache.containsKey(uuid)) {
             killsCache.put(uuid, dataStore.getKills(uuid));
+        }
+
+        if (!eliminatedCache.containsKey(uuid)) {
+            boolean eliminated = dataStore.isEliminated(uuid) || heartsCache.getOrDefault(uuid, DEFAULT_HEARTS) <= 0;
+            eliminatedCache.put(uuid, eliminated);
         }
 
         syncPlayer(player);
@@ -133,7 +134,11 @@ public class HeartManager {
 
         if (hearts <= 0) {
             maxHealth.setBaseValue(2.0D);
-            player.setHealth(1.0D);
+
+            if (player.getHealth() > 1.0D) {
+                player.setHealth(1.0D);
+            }
+
             player.setGameMode(GameMode.SPECTATOR);
             return;
         }

@@ -20,6 +20,7 @@ public class KillRewardService {
 
         if (killer != null && !killer.getUniqueId().equals(dead.getUniqueId())) {
             heartManager.addHearts(killer, 1);
+            heartManager.addKill(killer);
             killer.sendMessage("§aDu fick 1 hjärta för killen.");
         }
 

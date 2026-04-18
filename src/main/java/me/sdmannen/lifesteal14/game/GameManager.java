@@ -1,8 +1,8 @@
 package me.sdmannen.lifesteal14.game;
 
 import org.bukkit.Bukkit;
-import org.bukkit.plugin.Plugin;
 import org.bukkit.plugin.java.JavaPlugin;
+import org.bukkit.scheduler.BukkitTask;
 
 public class GameManager {
 
@@ -11,6 +11,9 @@ public class GameManager {
 
     private GameState gameState;
     private boolean netherOpen;
+
+    private BukkitTask graceTask;
+    private BukkitTask netherTask;
 
     public GameManager(JavaPlugin plugin, HeartManager heartManager) {
         this.plugin = plugin;
@@ -24,6 +27,8 @@ public class GameManager {
             return;
         }
 
+        cancelScheduledTasks();
+
         gameState = GameState.GRACE;
         netherOpen = false;
 
@@ -34,14 +39,21 @@ public class GameManager {
     }
 
     public void stopGame() {
+        cancelScheduledTasks();
         gameState = GameState.ENDED;
         Bukkit.broadcastMessage("§cSpelet har avslutats.");
+    }
+
+    public void shutdown() {
+        cancelScheduledTasks();
     }
 
     private void startGracePeriodTimer() {
         long ticks = 20L * 60L * 60L; // 1 timme
 
-        Bukkit.getScheduler().runTaskLater(plugin, () -> {
+        graceTask = Bukkit.getScheduler().runTaskLater(plugin, () -> {
+            graceTask = null;
+
             if (gameState == GameState.GRACE) {
                 gameState = GameState.RUNNING;
                 Bukkit.broadcastMessage("§cGrace period är slut. PvP är nu aktiverat.");
@@ -52,10 +64,26 @@ public class GameManager {
     private void startNetherTimer() {
         long ticks = 20L * 60L * 60L * 24L * 8L; // 8 dagar
 
-        Bukkit.getScheduler().runTaskLater(plugin, () -> {
-            netherOpen = true;
-            Bukkit.broadcastMessage("§6Nether är nu öppet.");
+        netherTask = Bukkit.getScheduler().runTaskLater(plugin, () -> {
+            netherTask = null;
+
+            if (gameState == GameState.GRACE || gameState == GameState.RUNNING) {
+                netherOpen = true;
+                Bukkit.broadcastMessage("§6Nether är nu öppet.");
+            }
         }, ticks);
+    }
+
+    private void cancelScheduledTasks() {
+        if (graceTask != null) {
+            graceTask.cancel();
+            graceTask = null;
+        }
+
+        if (netherTask != null) {
+            netherTask.cancel();
+            netherTask = null;
+        }
     }
 
     public GameState getGameState() {
@@ -68,6 +96,10 @@ public class GameManager {
 
     public boolean isRunning() {
         return gameState == GameState.RUNNING;
+    }
+
+    public boolean isActive() {
+        return gameState == GameState.GRACE || gameState == GameState.RUNNING;
     }
 
     public boolean isNetherOpen() {

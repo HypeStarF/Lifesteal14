@@ -1,6 +1,5 @@
 package me.sdmannen.lifesteal14.game;
 
-
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerQuitEvent;
