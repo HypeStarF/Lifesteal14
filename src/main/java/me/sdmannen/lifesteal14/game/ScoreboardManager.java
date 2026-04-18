@@ -2,18 +2,12 @@ package me.sdmannen.lifesteal14.game;
 
 import me.sdmannen.lifesteal14.Main;
 import org.bukkit.Bukkit;
-import org.bukkit.ChatColor;
-import org.bukkit.OfflinePlayer;
-import org.bukkit.boss.BarColor;
-import org.bukkit.boss.BarStyle;
-import org.bukkit.boss.BossBar;
 import org.bukkit.entity.Player;
 import org.bukkit.scoreboard.DisplaySlot;
 import org.bukkit.scoreboard.Objective;
 import org.bukkit.scoreboard.Scoreboard;
 
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
 import java.util.UUID;
 
@@ -22,13 +16,9 @@ public class ScoreboardManager {
     private final Main plugin;
     private final HeartManager heartManager;
 
-    private final BossBar leaderBossBar;
-
     public ScoreboardManager(Main plugin, HeartManager heartManager) {
         this.plugin = plugin;
         this.heartManager = heartManager;
-        this.leaderBossBar = Bukkit.createBossBar("§eIngen ensam ledare", BarColor.RED, BarStyle.SOLID);
-        this.leaderBossBar.setVisible(true);
 
         startUpdater();
     }
@@ -38,13 +28,10 @@ public class ScoreboardManager {
     }
 
     public void shutdown() {
-        leaderBossBar.removeAll();
-        leaderBossBar.setVisible(false);
+        // Ingen bossbar här längre
     }
 
     public void updateAll() {
-        updateLeaderBossBar();
-
         for (Player player : Bukkit.getOnlinePlayers()) {
             updateSidebar(player);
         }
@@ -75,7 +62,8 @@ public class ScoreboardManager {
     }
 
     private void setLine(Objective objective, String text, int score) {
-        objective.getScore(text).setScore(score);
+        String unique = text + "§" + Integer.toHexString(score);
+        objective.getScore(unique).setScore(score);
     }
 
     private String formatLeaderLine(LeaderData data, LeaderType type) {
@@ -87,7 +75,7 @@ public class ScoreboardManager {
             return "§7Delat";
         }
 
-        String name = heartManager.getPlayerName(data.players.getFirst());
+        String name = heartManager.getPlayerName(data.players.get(0));
 
         if (type == LeaderType.KILLS) {
             return "§f" + shorten(name) + " §7(" + data.value + ")";
@@ -101,35 +89,6 @@ public class ScoreboardManager {
             return input;
         }
         return input.substring(0, 16);
-    }
-
-    private void updateLeaderBossBar() {
-        leaderBossBar.removeAll();
-
-        for (Player player : Bukkit.getOnlinePlayers()) {
-            leaderBossBar.addPlayer(player);
-        }
-
-        LeaderData highest = getHighestHearts();
-
-        if (highest == null || highest.players.isEmpty()) {
-            leaderBossBar.setColor(BarColor.RED);
-            leaderBossBar.setTitle("§7Ingen ledare");
-            leaderBossBar.setProgress(1.0D);
-            return;
-        }
-
-        if (highest.players.size() > 1) {
-            leaderBossBar.setColor(BarColor.RED);
-            leaderBossBar.setTitle("§7Delad ledning i hjärtan");
-            leaderBossBar.setProgress(1.0D);
-            return;
-        }
-
-        String leaderName = heartManager.getPlayerName(highest.players.getFirst());
-        leaderBossBar.setColor(BarColor.YELLOW);
-        leaderBossBar.setTitle("§eFlest hjärtan: §f" + leaderName + " §c(" + highest.value + "❤)");
-        leaderBossBar.setProgress(1.0D);
     }
 
     public String buildLeaderboardMessage() {
@@ -167,15 +126,19 @@ public class ScoreboardManager {
     }
 
     private LeaderData getHighestHearts() {
-        List<UUID> alive = heartManager.getAlivePlayerUuids();
-        if (alive.isEmpty()) {
+        List<UUID> all = heartManager.getAllKnownPlayerUuids();
+        if (all.isEmpty()) {
             return null;
         }
 
         int best = Integer.MIN_VALUE;
         List<UUID> winners = new ArrayList<>();
 
-        for (UUID uuid : alive) {
+        for (UUID uuid : all) {
+            if (heartManager.isEliminated(uuid)) {
+                continue;
+            }
+
             int hearts = heartManager.getHearts(uuid);
 
             if (hearts > best) {
@@ -187,19 +150,27 @@ public class ScoreboardManager {
             }
         }
 
+        if (winners.isEmpty()) {
+            return null;
+        }
+
         return new LeaderData(best, winners);
     }
 
     private LeaderData getLowestHearts() {
-        List<UUID> alive = heartManager.getAlivePlayerUuids();
-        if (alive.isEmpty()) {
+        List<UUID> all = heartManager.getAllKnownPlayerUuids();
+        if (all.isEmpty()) {
             return null;
         }
 
         int lowest = Integer.MAX_VALUE;
         List<UUID> losers = new ArrayList<>();
 
-        for (UUID uuid : alive) {
+        for (UUID uuid : all) {
+            if (heartManager.isEliminated(uuid)) {
+                continue;
+            }
+
             int hearts = heartManager.getHearts(uuid);
 
             if (hearts < lowest) {
@@ -211,19 +182,27 @@ public class ScoreboardManager {
             }
         }
 
+        if (losers.isEmpty()) {
+            return null;
+        }
+
         return new LeaderData(lowest, losers);
     }
 
     private LeaderData getMostKills() {
-        List<UUID> alive = heartManager.getAlivePlayerUuids();
-        if (alive.isEmpty()) {
+        List<UUID> all = heartManager.getAllKnownPlayerUuids();
+        if (all.isEmpty()) {
             return null;
         }
 
         int best = Integer.MIN_VALUE;
         List<UUID> winners = new ArrayList<>();
 
-        for (UUID uuid : alive) {
+        for (UUID uuid : all) {
+            if (heartManager.isEliminated(uuid)) {
+                continue;
+            }
+
             int kills = heartManager.getKills(uuid);
 
             if (kills > best) {
@@ -233,6 +212,10 @@ public class ScoreboardManager {
             } else if (kills == best) {
                 winners.add(uuid);
             }
+        }
+
+        if (winners.isEmpty()) {
+            return null;
         }
 
         return new LeaderData(best, winners);

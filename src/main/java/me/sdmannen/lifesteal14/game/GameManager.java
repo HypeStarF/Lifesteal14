@@ -22,7 +22,6 @@ public class GameManager {
     private BukkitTask graceTask;
     private BukkitTask netherTask;
     private BukkitTask revealTask;
-    private BukkitTask revealCountdownTask;
 
     private BossBar revealBossBar;
     private int secondsUntilReveal;
@@ -95,36 +94,52 @@ public class GameManager {
         revealIntervalSeconds = plugin.getConfig().getInt("timers.reveal-interval-minutes", 60) * 60;
         secondsUntilReveal = revealIntervalSeconds;
 
-        revealBossBar = Bukkit.createBossBar("§eReveal om " + formatTime(secondsUntilReveal), BarColor.YELLOW, BarStyle.SOLID);
+        revealBossBar = Bukkit.createBossBar("§eReveal pausad", BarColor.YELLOW, BarStyle.SOLID);
         revealBossBar.setVisible(true);
 
         revealTask = Bukkit.getScheduler().runTaskTimer(plugin, () -> {
             if (!isActive()) {
+                updateRevealBar();
                 return;
             }
 
-            doHourlyReveal();
-            secondsUntilReveal = revealIntervalSeconds;
-            updateRevealBar();
-        }, revealIntervalSeconds * 20L, revealIntervalSeconds * 20L);
+            if (canRunRevealCountdown()) {
+                secondsUntilReveal = Math.max(0, secondsUntilReveal - 1);
 
-        revealCountdownTask = Bukkit.getScheduler().runTaskTimer(plugin, () -> {
-            if (!isActive()) {
-                return;
+                if (secondsUntilReveal <= 0) {
+                    doHourlyReveal();
+                    secondsUntilReveal = revealIntervalSeconds;
+                }
             }
 
-            secondsUntilReveal = Math.max(0, secondsUntilReveal - 1);
             updateRevealBar();
         }, 20L, 20L);
 
         updateRevealBar();
     }
 
+    private Player getOnlineHighestHeartLeader() {
+        UUID leaderUuid = heartManager.getUniqueHighestHeartPlayerUuid();
+        if (leaderUuid == null) {
+            return null;
+        }
+
+        Player player = Bukkit.getPlayer(leaderUuid);
+        if (player == null || !player.isOnline()) {
+            return null;
+        }
+
+        return player;
+    }
+
+    private boolean canRunRevealCountdown() {
+        return isActive() && getOnlineHighestHeartLeader() != null;
+    }
+
     private void doHourlyReveal() {
-        Player leader = heartManager.getUniqueHighestHeartPlayerOnline();
+        Player leader = getOnlineHighestHeartLeader();
 
         if (leader == null) {
-            Bukkit.broadcastMessage("§7Ingen position avslöjas denna timme eftersom ledningen är delad.");
             return;
         }
 
@@ -153,7 +168,28 @@ public class GameManager {
             revealBossBar.addPlayer(player);
         }
 
-        revealBossBar.setTitle("§eReveal om " + formatTime(secondsUntilReveal));
+        if (!isActive()) {
+            revealBossBar.setTitle("§7Ingen aktiv match");
+            revealBossBar.setProgress(1.0D);
+            return;
+        }
+
+        Player leader = getOnlineHighestHeartLeader();
+
+        if (leader == null) {
+            UUID leaderUuid = heartManager.getUniqueHighestHeartPlayerUuid();
+
+            if (leaderUuid == null) {
+                revealBossBar.setTitle("§7Reveal pausad - delad ledning");
+            } else {
+                revealBossBar.setTitle("§7Reveal pausad - ledaren är offline");
+            }
+
+            revealBossBar.setProgress(1.0D);
+            return;
+        }
+
+        revealBossBar.setTitle("§eReveal om " + formatTime(secondsUntilReveal) + " §7| §f" + leader.getName());
 
         if (revealIntervalSeconds <= 0) {
             revealBossBar.setProgress(1.0D);
@@ -192,11 +228,6 @@ public class GameManager {
         if (revealTask != null) {
             revealTask.cancel();
             revealTask = null;
-        }
-
-        if (revealCountdownTask != null) {
-            revealCountdownTask.cancel();
-            revealCountdownTask = null;
         }
     }
 

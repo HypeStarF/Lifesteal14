@@ -308,4 +308,67 @@ public class HeartManager {
         OfflinePlayer offline = Bukkit.getOfflinePlayer(uuid);
         return offline.getName() != null ? offline.getName() : uuid.toString();
     }
+    public List<UUID> getAllKnownPlayerUuids() {
+        return new ArrayList<>(heartsCache.keySet());
+    }
+
+    public UUID getUniqueHighestHeartPlayerUuid() {
+        UUID best = null;
+        int bestHearts = Integer.MIN_VALUE;
+        boolean tie = false;
+
+        for (UUID uuid : getAlivePlayerUuids()) {
+            int hearts = getHearts(uuid);
+
+            if (hearts > bestHearts) {
+                best = uuid;
+                bestHearts = hearts;
+                tie = false;
+            } else if (hearts == bestHearts) {
+                tie = true;
+            }
+        }
+
+        return tie ? null : best;
+    }
+
+    public UUID getUniqueLowestHeartPlayerUuid() {
+        UUID lowest = null;
+        int lowestHearts = Integer.MAX_VALUE;
+        boolean tie = false;
+
+        for (UUID uuid : getAlivePlayerUuids()) {
+            int hearts = getHearts(uuid);
+
+            if (hearts < lowestHearts) {
+                lowest = uuid;
+                lowestHearts = hearts;
+                tie = false;
+            } else if (hearts == lowestHearts) {
+                tie = true;
+            }
+        }
+
+        return tie ? null : lowest;
+    }
+
+    public UUID getUniqueHighestKillPlayerUuid() {
+        UUID best = null;
+        int bestKills = Integer.MIN_VALUE;
+        boolean tie = false;
+
+        for (UUID uuid : getAlivePlayerUuids()) {
+            int kills = getKills(uuid);
+
+            if (kills > bestKills) {
+                best = uuid;
+                bestKills = kills;
+                tie = false;
+            } else if (kills == bestKills) {
+                tie = true;
+            }
+        }
+
+        return tie ? null : best;
+    }
 }
