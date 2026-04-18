@@ -271,6 +271,8 @@ public class HeartGameCommand implements CommandExecutor {
     }
 
     private void sendStatus(CommandSender sender) {
+        LobbyCageManager cage = gameManager.getLobbyCageManager();
+
         sender.sendMessage("§6§lGame status");
         sender.sendMessage("§eState: §f" + gameManager.getGameState());
         sender.sendMessage("§eActive: §f" + gameManager.isActive());
@@ -280,13 +282,29 @@ public class HeartGameCommand implements CommandExecutor {
         sender.sendMessage("§eReveal display: §f" + gameManager.getRevealDisplay());
         sender.sendMessage("§eNether display: §f" + gameManager.getNetherDisplay());
         sender.sendMessage("§eGame ends display: §f" + gameManager.getGameEndDisplay());
+
+        sender.sendMessage("§7");
+        sender.sendMessage("§6§lTimers");
         sender.sendMessage("§eGrace seconds remaining: §f" + gameManager.getGraceSecondsRemaining());
         sender.sendMessage("§eReveal seconds remaining: §f" + gameManager.getSecondsUntilReveal());
         sender.sendMessage("§eReveal interval seconds: §f" + gameManager.getRevealIntervalSeconds());
         sender.sendMessage("§eNether seconds remaining: §f" + gameManager.getNetherSecondsRemaining());
         sender.sendMessage("§eGame end seconds remaining: §f" + gameManager.getGameEndSecondsRemaining());
+
+        sender.sendMessage("§7");
+        sender.sendMessage("§6§lPlayers");
         sender.sendMessage("§eAlive count: §f" + heartManager.getAlivePlayerCount());
         sender.sendMessage("§eKnown players: §f" + heartManager.getAllKnownPlayerUuids().size());
+
+        sender.sendMessage("§7");
+        sender.sendMessage("§6§lLobby cage");
+        sender.sendMessage("§eCreated: §f" + cage.isCreated());
+        sender.sendMessage("§eWorld: §f" + (cage.getWorld() != null ? cage.getWorld().getName() : "null"));
+        sender.sendMessage("§eCenter: §f" + formatLocation(cage.getCenter()));
+        sender.sendMessage("§eBounds: §f"
+                + "X[" + cage.getMinX() + ".." + cage.getMaxX() + "] "
+                + "Y[" + cage.getMinY() + ".." + cage.getMaxY() + "] "
+                + "Z[" + cage.getMinZ() + ".." + cage.getMaxZ() + "]");
     }
 
     private void sendPlayerHearts(CommandSender sender, Player target) {
@@ -340,5 +358,18 @@ public class HeartGameCommand implements CommandExecutor {
             sender.sendMessage(errorMessage);
             return null;
         }
+    }
+    private String formatLocation(Location location) {
+        if (location == null || location.getWorld() == null) {
+            return "null";
+        }
+
+        return location.getWorld().getName()
+                + " "
+                + location.getBlockX()
+                + ", "
+                + location.getBlockY()
+                + ", "
+                + location.getBlockZ();
     }
 }
