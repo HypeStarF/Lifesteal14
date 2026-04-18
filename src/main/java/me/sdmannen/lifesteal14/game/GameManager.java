@@ -21,6 +21,7 @@ public class GameManager {
 
     private static final long GAME_END_SECONDS = 14L * 24L * 60L * 60L;
     private static final long DAY_SECONDS = 24L * 60L * 60L;
+    private static final int FINAL_DAY_REVEAL_INTERVAL_SECONDS = 10 * 60;
 
     private final JavaPlugin plugin;
     private final HeartManager heartManager;
@@ -306,7 +307,7 @@ public class GameManager {
         }
 
         doHourlyReveal();
-        secondsUntilReveal = revealIntervalSeconds;
+        secondsUntilReveal = getCurrentRevealIntervalSeconds();
         updateTimerBossBar();
         saveState();
     }
@@ -366,7 +367,7 @@ public class GameManager {
             if (gameState == GameState.GRACE) {
                 graceSecondsRemaining = 0;
                 gameState = GameState.RUNNING;
-                secondsUntilReveal = revealIntervalSeconds;
+                secondsUntilReveal = getCurrentRevealIntervalSeconds();
 
                 if (plugin.getConfig().getBoolean("messages.broadcast-grace-end", true)) {
                     Bukkit.broadcastMessage("§cGrace period är slut. PvP är nu aktiverat.");
@@ -449,7 +450,7 @@ public class GameManager {
 
                 if (secondsUntilReveal <= 0) {
                     doHourlyReveal();
-                    secondsUntilReveal = revealIntervalSeconds;
+                    secondsUntilReveal = getCurrentRevealIntervalSeconds();
                 }
             }
 
@@ -531,12 +532,14 @@ public class GameManager {
 
         timerBossBar.setTitle("§eReveal om " + formatClock(secondsUntilReveal) + " §7| §f" + leader.getName());
 
-        if (revealIntervalSeconds <= 0) {
+        int currentRevealInterval = getCurrentRevealIntervalSeconds();
+
+        if (currentRevealInterval <= 0) {
             timerBossBar.setProgress(1.0D);
             return;
         }
 
-        double progress = Math.max(0.0D, Math.min(1.0D, (double) secondsUntilReveal / (double) revealIntervalSeconds));
+        double progress = Math.max(0.0D, Math.min(1.0D, (double) secondsUntilReveal / (double) currentRevealInterval));
         timerBossBar.setProgress(progress);
     }
 
@@ -827,6 +830,13 @@ public class GameManager {
         }
 
         return formatLongTime(gameEndSecondsRemaining);
+    }
+    private int getCurrentRevealIntervalSeconds() {
+        if (gameEndSecondsRemaining > 0 && gameEndSecondsRemaining <= DAY_SECONDS) {
+            return FINAL_DAY_REVEAL_INTERVAL_SECONDS;
+        }
+
+        return Math.max(1, revealIntervalSeconds);
     }
 
     private String formatClock(long totalSeconds) {

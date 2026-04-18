@@ -24,5 +24,4 @@ messages:
   broadcast-game-stop: true
   broadcast-grace-end: true
 
-anti-farm:
-  cooldown-minutes: 60
+
