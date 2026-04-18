@@ -2,19 +2,7 @@ package me.sdmannen.lifesteal14;
 
 import me.sdmannen.lifesteal14.data.GameDataStore;
 import me.sdmannen.lifesteal14.data.PlayerDataStore;
-import me.sdmannen.lifesteal14.game.CombatTagService;
-import me.sdmannen.lifesteal14.game.GameManager;
-import me.sdmannen.lifesteal14.game.HeartGameCommand;
-import me.sdmannen.lifesteal14.game.HeartGameTabCompleter;
-import me.sdmannen.lifesteal14.game.HeartManager;
-import me.sdmannen.lifesteal14.game.JoinListener;
-import me.sdmannen.lifesteal14.game.KillRewardService;
-import me.sdmannen.lifesteal14.game.NetherListener;
-import me.sdmannen.lifesteal14.game.PlayerDeathListener;
-import me.sdmannen.lifesteal14.game.PlayerRespawnListener;
-import me.sdmannen.lifesteal14.game.PvpListener;
-import me.sdmannen.lifesteal14.game.QuitListener;
-import me.sdmannen.lifesteal14.game.ScoreboardManager;
+import me.sdmannen.lifesteal14.game.*;
 import org.bukkit.plugin.java.JavaPlugin;
 
 public final class Main extends JavaPlugin {
@@ -28,6 +16,7 @@ public final class Main extends JavaPlugin {
     private GameDataStore gameDataStore;
     private ScoreboardManager scoreboardManager;
     private CombatTagService combatTagService;
+    private DamageAttributionTracker damageAttributionTracker;
 
     @Override
     public void onEnable() {
@@ -42,6 +31,7 @@ public final class Main extends JavaPlugin {
         this.gameManager = new GameManager(this, heartManager, gameDataStore);
         this.killRewardService = new KillRewardService(this, heartManager, gameManager);
         this.scoreboardManager = new ScoreboardManager(this, heartManager, gameManager);
+        this.damageAttributionTracker = new DamageAttributionTracker();
 
         heartManager.loadAllKnownPlayersFromStore();
         gameManager.loadPersistentState();
@@ -97,9 +87,13 @@ public final class Main extends JavaPlugin {
         getServer().getPluginManager().registerEvents(new JoinListener(heartManager, gameManager), this);
         getServer().getPluginManager().registerEvents(new QuitListener(heartManager), this);
         getServer().getPluginManager().registerEvents(new PlayerRespawnListener(this, heartManager), this);
-        getServer().getPluginManager().registerEvents(new PlayerDeathListener(gameManager, killRewardService, combatTagService), this);
+        getServer().getPluginManager().registerEvents(
+                new PlayerDeathListener(gameManager, killRewardService, damageAttributionTracker),
+                this
+        );
         getServer().getPluginManager().registerEvents(new PvpListener(gameManager, combatTagService), this);
         getServer().getPluginManager().registerEvents(new NetherListener(gameManager), this);
+        getServer().getPluginManager().registerEvents(damageAttributionTracker, this);
     }
 
     public static Main getInstance() {
@@ -132,5 +126,8 @@ public final class Main extends JavaPlugin {
 
     public CombatTagService getCombatTagService() {
         return combatTagService;
+    }
+    public DamageAttributionTracker getDamageAttributionTracker() {
+        return damageAttributionTracker;
     }
 }
