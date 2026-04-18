@@ -10,5 +10,3 @@ hearts:
   highest-death-bonus: 2
   lowest-bonus: 2
 
-anti-farm:
-  cooldown-minutes: 60

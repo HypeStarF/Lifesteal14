@@ -98,8 +98,7 @@ public class GameManager {
         gameState = GameState.GRACE;
         netherOpen = false;
 
-        //graceSecondsRemaining = plugin.getConfig().getInt("timers.grace-hours", 1) * 60 * 60;
-        graceSecondsRemaining = plugin.getConfig().getInt("timers.grace-hours", 1) * 60;
+        graceSecondsRemaining = plugin.getConfig().getInt("timers.grace-hours", 1) * 60 * 60;
         revealIntervalSeconds = plugin.getConfig().getInt("timers.reveal-interval-minutes", 60) * 60;
         secondsUntilReveal = revealIntervalSeconds;
         netherSecondsRemaining = plugin.getConfig().getLong("timers.nether-days", 8L) * 24L * 60L * 60L;
@@ -194,6 +193,16 @@ public class GameManager {
 
             if (isActive() && gameEndSecondsRemaining > 0) {
                 gameEndSecondsRemaining--;
+
+                if (gameEndSecondsRemaining > 0 && gameEndSecondsRemaining % 86400L == 0L) {
+                    int restoredPlayers = heartManager.restoreAllTemporaryPveHearts();
+
+                    if (restoredPlayers > 0) {
+                        Bukkit.broadcastMessage("§aGlobal PvE-regeneration aktiverades. Alla temporärt förlorade PvE-hjärtan har återställts.");
+                    } else {
+                        Bukkit.broadcastMessage("§aGlobal PvE-regeneration aktiverades. Inga PvE-hjärtan behövde återställas.");
+                    }
+                }
             }
 
             if (gameState == GameState.RUNNING && canRunRevealCountdown()) {
@@ -505,5 +514,24 @@ public class GameManager {
 
     public LobbyCageManager getLobbyCageManager() {
         return lobbyCageManager;
+    }
+    public int getSecondsUntilReveal() {
+        return secondsUntilReveal;
+    }
+
+    public int getRevealIntervalSeconds() {
+        return revealIntervalSeconds;
+    }
+
+    public int getGraceSecondsRemaining() {
+        return graceSecondsRemaining;
+    }
+
+    public long getNetherSecondsRemaining() {
+        return netherSecondsRemaining;
+    }
+
+    public long getGameEndSecondsRemaining() {
+        return gameEndSecondsRemaining;
     }
 }

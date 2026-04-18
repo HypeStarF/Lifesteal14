@@ -18,6 +18,8 @@ public class PlayerRespawnListener implements Listener {
 
     @EventHandler
     public void onRespawn(PlayerRespawnEvent event) {
-        Bukkit.getScheduler().runTask(plugin, () -> heartManager.syncPlayer(event.getPlayer()));
+        Bukkit.getScheduler().runTaskLater(plugin, () -> {
+            heartManager.syncPlayer(event.getPlayer());
+        }, 1L);
     }
 }

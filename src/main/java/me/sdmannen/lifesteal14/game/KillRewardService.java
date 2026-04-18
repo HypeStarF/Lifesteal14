@@ -17,7 +17,7 @@ public class KillRewardService {
     }
 
     public void handlePlayerKill(Player dead, Player killer) {
-        if (heartManager.isEliminated(dead)) {
+        if (heartManager.isPermanentlyEliminated(dead)) {
             return;
         }
 
@@ -29,11 +29,11 @@ public class KillRewardService {
         boolean deadWasUniqueHighest = heartManager.isUniqueHighest(dead);
         Player uniqueLowest = heartManager.getUniqueLowestHeartPlayerOnline(dead.getUniqueId());
 
-        heartManager.removeHearts(dead, baseDeathLoss);
-
         boolean validKiller = killer != null && !killer.getUniqueId().equals(dead.getUniqueId());
 
         if (validKiller) {
+            heartManager.removeHearts(dead, baseDeathLoss);
+
             if (baseKillerGain > 0) {
                 heartManager.addHearts(killer, baseKillerGain);
             }
@@ -44,21 +44,34 @@ public class KillRewardService {
             }
 
             heartManager.addKill(killer);
+
+            if (uniqueLowest != null && lowestBonus > 0) {
+                heartManager.addHearts(uniqueLowest, lowestBonus);
+                uniqueLowest.sendMessage("§aDu fick +" + lowestBonus + " hjärtan eftersom du låg ensam sist.");
+            }
+
+            int remainingHearts = heartManager.getHearts(dead);
+
+            if (remainingHearts <= 0) {
+                heartManager.eliminate(dead);
+                Bukkit.broadcastMessage("§c" + dead.getName() + " är permanent utslagen.");
+                gameManager.checkWinCondition();
+            } else {
+                dead.sendMessage("§cDu har nu " + remainingHearts + " hjärtan kvar.");
+            }
+
+            return;
         }
 
-        if (uniqueLowest != null && lowestBonus > 0) {
-            heartManager.addHearts(uniqueLowest, lowestBonus);
-            uniqueLowest.sendMessage("§aDu fick +" + lowestBonus + " hjärtan eftersom du låg ensam sist.");
-        }
+        heartManager.addTemporaryPveLoss(dead, baseDeathLoss);
 
         int remainingHearts = heartManager.getHearts(dead);
 
         if (remainingHearts <= 0) {
-            heartManager.eliminate(dead);
-            Bukkit.broadcastMessage("§c" + dead.getName() + " är utslagen.");
-            gameManager.checkWinCondition();
+            Bukkit.broadcastMessage("§e" + dead.getName() + " är tillfälligt utslagen till nästa PvE-regeneration.");
+            dead.sendMessage("§eDu blev tillfälligt utslagen av PvE. Dina PvE-förlorade hjärtan återställs vid nästa globala regen.");
         } else {
-            dead.sendMessage("§cDu har nu " + remainingHearts + " hjärtan kvar.");
+            dead.sendMessage("§eDu förlorade " + baseDeathLoss + " temporärt PvE-hjärta/an. Du har nu " + remainingHearts + " hjärtan kvar.");
         }
     }
 }

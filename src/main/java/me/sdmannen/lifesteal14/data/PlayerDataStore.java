@@ -42,6 +42,14 @@ public class PlayerDataStore {
         config.set("players." + uuid + ".hearts", hearts);
     }
 
+    public int getTemporaryPveLoss(UUID uuid) {
+        return config.getInt("players." + uuid + ".temporary-pve-loss", 0);
+    }
+
+    public void setTemporaryPveLoss(UUID uuid, int amount) {
+        config.set("players." + uuid + ".temporary-pve-loss", amount);
+    }
+
     public boolean isEliminated(UUID uuid) {
         return config.getBoolean("players." + uuid + ".eliminated", false);
     }

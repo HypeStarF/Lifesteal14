@@ -12,9 +12,9 @@ import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.HashMap;
 import java.util.UUID;
 
 public class HeartManager {
@@ -23,8 +23,9 @@ public class HeartManager {
     private final PlayerDataStore dataStore;
     private final int defaultHearts;
 
-    private final Map<UUID, Integer> heartsCache = new HashMap<>();
-    private final Map<UUID, Boolean> eliminatedCache = new HashMap<>();
+    private final Map<UUID, Integer> permanentHeartsCache = new HashMap<>();
+    private final Map<UUID, Integer> temporaryPveLossCache = new HashMap<>();
+    private final Map<UUID, Boolean> permanentEliminatedCache = new HashMap<>();
     private final Map<UUID, Integer> killsCache = new HashMap<>();
 
     public HeartManager(Main plugin, PlayerDataStore dataStore) {
@@ -36,81 +37,183 @@ public class HeartManager {
     public void loadPlayer(Player player) {
         UUID uuid = player.getUniqueId();
 
-        int hearts = dataStore.getHearts(uuid, defaultHearts);
-        boolean eliminated = dataStore.isEliminated(uuid) || hearts <= 0;
+        int permanentHearts = dataStore.getHearts(uuid, defaultHearts);
+        int temporaryPveLoss = dataStore.getTemporaryPveLoss(uuid);
+        boolean permanentlyEliminated = dataStore.isEliminated(uuid) || permanentHearts <= 0;
         int kills = dataStore.getKills(uuid);
 
-        heartsCache.put(uuid, hearts);
-        eliminatedCache.put(uuid, eliminated);
+        permanentHearts = Math.max(0, permanentHearts);
+        temporaryPveLoss = Math.max(0, Math.min(temporaryPveLoss, permanentHearts));
+
+        permanentHeartsCache.put(uuid, permanentHearts);
+        temporaryPveLossCache.put(uuid, temporaryPveLoss);
+        permanentEliminatedCache.put(uuid, permanentlyEliminated);
         killsCache.put(uuid, kills);
 
         syncPlayer(player);
     }
 
     public void savePlayer(Player player) {
-        UUID uuid = player.getUniqueId();
+        savePlayer(player.getUniqueId());
+    }
 
-        dataStore.setHearts(uuid, heartsCache.getOrDefault(uuid, defaultHearts));
-        dataStore.setEliminated(uuid, eliminatedCache.getOrDefault(uuid, false));
+    private void savePlayer(UUID uuid) {
+        dataStore.setHearts(uuid, permanentHeartsCache.getOrDefault(uuid, defaultHearts));
+        dataStore.setTemporaryPveLoss(uuid, temporaryPveLossCache.getOrDefault(uuid, 0));
+        dataStore.setEliminated(uuid, permanentEliminatedCache.getOrDefault(uuid, false));
         dataStore.setKills(uuid, killsCache.getOrDefault(uuid, 0));
         dataStore.save();
     }
 
     public void saveAll() {
-        for (UUID uuid : heartsCache.keySet()) {
-            dataStore.setHearts(uuid, heartsCache.getOrDefault(uuid, defaultHearts));
-            dataStore.setEliminated(uuid, eliminatedCache.getOrDefault(uuid, false));
+        for (UUID uuid : permanentHeartsCache.keySet()) {
+            dataStore.setHearts(uuid, permanentHeartsCache.getOrDefault(uuid, defaultHearts));
+            dataStore.setTemporaryPveLoss(uuid, temporaryPveLossCache.getOrDefault(uuid, 0));
+            dataStore.setEliminated(uuid, permanentEliminatedCache.getOrDefault(uuid, false));
             dataStore.setKills(uuid, killsCache.getOrDefault(uuid, 0));
         }
         dataStore.save();
     }
 
     public int getHearts(Player player) {
-        return heartsCache.getOrDefault(player.getUniqueId(), defaultHearts);
+        return getHearts(player.getUniqueId());
     }
 
     public int getHearts(UUID uuid) {
-        return heartsCache.getOrDefault(uuid, defaultHearts);
+        if (isPermanentlyEliminated(uuid)) {
+            return 0;
+        }
+
+        int permanentHearts = permanentHeartsCache.getOrDefault(uuid, defaultHearts);
+        int temporaryLoss = temporaryPveLossCache.getOrDefault(uuid, 0);
+        return Math.max(0, permanentHearts - temporaryLoss);
+    }
+
+    public int getPermanentHearts(Player player) {
+        return getPermanentHearts(player.getUniqueId());
+    }
+
+    public int getPermanentHearts(UUID uuid) {
+        return permanentHeartsCache.getOrDefault(uuid, defaultHearts);
+    }
+
+    public int getTemporaryPveLoss(Player player) {
+        return getTemporaryPveLoss(player.getUniqueId());
+    }
+
+    public int getTemporaryPveLoss(UUID uuid) {
+        return temporaryPveLossCache.getOrDefault(uuid, 0);
     }
 
     public void setHearts(Player player, int amount) {
-        int clamped = Math.max(0, amount);
         UUID uuid = player.getUniqueId();
+        int clamped = Math.max(0, amount);
 
-        heartsCache.put(uuid, clamped);
-        eliminatedCache.put(uuid, clamped <= 0);
+        permanentHeartsCache.put(uuid, clamped);
+        permanentEliminatedCache.put(uuid, clamped <= 0);
+
+        int currentTemporaryLoss = temporaryPveLossCache.getOrDefault(uuid, 0);
+        temporaryPveLossCache.put(uuid, Math.min(currentTemporaryLoss, clamped));
+
+        if (clamped <= 0) {
+            temporaryPveLossCache.put(uuid, 0);
+        }
 
         syncPlayer(player);
-        savePlayer(player);
+        savePlayer(uuid);
     }
 
     public void addHearts(Player player, int amount) {
-        setHearts(player, getHearts(player) + amount);
+        setHearts(player, getPermanentHearts(player) + amount);
     }
 
     public void removeHearts(Player player, int amount) {
-        setHearts(player, getHearts(player) - amount);
+        setHearts(player, getPermanentHearts(player) - amount);
+    }
+
+    public void addTemporaryPveLoss(Player player, int amount) {
+        UUID uuid = player.getUniqueId();
+
+        if (isPermanentlyEliminated(uuid) || amount <= 0) {
+            return;
+        }
+
+        int permanentHearts = getPermanentHearts(uuid);
+        int currentLoss = getTemporaryPveLoss(uuid);
+        int newLoss = Math.min(permanentHearts, currentLoss + amount);
+
+        temporaryPveLossCache.put(uuid, newLoss);
+
+        syncPlayer(player);
+        savePlayer(uuid);
+    }
+
+    public int restoreAllTemporaryPveHearts() {
+        int restoredPlayers = 0;
+
+        for (UUID uuid : permanentHeartsCache.keySet()) {
+            if (isPermanentlyEliminated(uuid)) {
+                continue;
+            }
+
+            int temporaryLoss = temporaryPveLossCache.getOrDefault(uuid, 0);
+            if (temporaryLoss <= 0) {
+                continue;
+            }
+
+            temporaryPveLossCache.put(uuid, 0);
+            restoredPlayers++;
+
+            Player online = Bukkit.getPlayer(uuid);
+            if (online != null && online.isOnline()) {
+                syncPlayer(online);
+            }
+        }
+
+        if (restoredPlayers > 0) {
+            saveAll();
+        }
+
+        return restoredPlayers;
+    }
+
+    public boolean isPermanentlyEliminated(Player player) {
+        return isPermanentlyEliminated(player.getUniqueId());
+    }
+
+    public boolean isPermanentlyEliminated(UUID uuid) {
+        return permanentEliminatedCache.getOrDefault(uuid, false);
+    }
+
+    public boolean isTemporarilyKnockedOut(Player player) {
+        return isTemporarilyKnockedOut(player.getUniqueId());
+    }
+
+    public boolean isTemporarilyKnockedOut(UUID uuid) {
+        return !isPermanentlyEliminated(uuid) && getHearts(uuid) <= 0;
     }
 
     public boolean isEliminated(Player player) {
-        return eliminatedCache.getOrDefault(player.getUniqueId(), false);
+        return isEliminated(player.getUniqueId());
     }
 
     public boolean isEliminated(UUID uuid) {
-        return eliminatedCache.getOrDefault(uuid, false);
+        return isPermanentlyEliminated(uuid) || isTemporarilyKnockedOut(uuid);
     }
 
     public void eliminate(Player player) {
         UUID uuid = player.getUniqueId();
-        heartsCache.put(uuid, 0);
-        eliminatedCache.put(uuid, true);
+
+        permanentHeartsCache.put(uuid, 0);
+        temporaryPveLossCache.put(uuid, 0);
+        permanentEliminatedCache.put(uuid, true);
 
         syncPlayer(player);
-        savePlayer(player);
+        savePlayer(uuid);
     }
 
     public int getKills(Player player) {
-        return killsCache.getOrDefault(player.getUniqueId(), 0);
+        return getKills(player.getUniqueId());
     }
 
     public int getKills(UUID uuid) {
@@ -120,27 +223,34 @@ public class HeartManager {
     public void addKill(Player player) {
         UUID uuid = player.getUniqueId();
         killsCache.put(uuid, getKills(player) + 1);
-        savePlayer(player);
+        savePlayer(uuid);
     }
 
     public void ensurePlayerExists(Player player) {
         UUID uuid = player.getUniqueId();
 
-        if (!heartsCache.containsKey(uuid)) {
-            heartsCache.put(uuid, dataStore.getHearts(uuid, defaultHearts));
+        if (!permanentHeartsCache.containsKey(uuid)) {
+            permanentHeartsCache.put(uuid, dataStore.getHearts(uuid, defaultHearts));
+        }
+
+        if (!temporaryPveLossCache.containsKey(uuid)) {
+            int permanentHearts = permanentHeartsCache.getOrDefault(uuid, defaultHearts);
+            int temporaryLoss = Math.max(0, Math.min(dataStore.getTemporaryPveLoss(uuid), permanentHearts));
+            temporaryPveLossCache.put(uuid, temporaryLoss);
         }
 
         if (!killsCache.containsKey(uuid)) {
             killsCache.put(uuid, dataStore.getKills(uuid));
         }
 
-        if (!eliminatedCache.containsKey(uuid)) {
-            boolean eliminated = dataStore.isEliminated(uuid) || heartsCache.getOrDefault(uuid, defaultHearts) <= 0;
-            eliminatedCache.put(uuid, eliminated);
+        if (!permanentEliminatedCache.containsKey(uuid)) {
+            boolean permanentlyEliminated =
+                    dataStore.isEliminated(uuid) || permanentHeartsCache.getOrDefault(uuid, defaultHearts) <= 0;
+            permanentEliminatedCache.put(uuid, permanentlyEliminated);
         }
 
         syncPlayer(player);
-        savePlayer(player);
+        savePlayer(uuid);
     }
 
     public void syncPlayer(Player player) {
@@ -149,35 +259,41 @@ public class HeartManager {
             return;
         }
 
-        int hearts = getHearts(player);
+        int currentHearts = getHearts(player);
 
         player.removePotionEffect(PotionEffectType.STRENGTH);
 
-        if (hearts <= 0) {
+        if (currentHearts <= 0) {
             maxHealth.setBaseValue(2.0D);
 
-            if (player.getHealth() > 1.0D) {
-                player.setHealth(1.0D);
+            if (!player.isDead()) {
+                if (player.getHealth() > 1.0D) {
+                    player.setHealth(1.0D);
+                }
+                player.setGameMode(GameMode.SPECTATOR);
             }
 
-            player.setGameMode(GameMode.SPECTATOR);
             return;
         }
 
-        double maxHealthValue = hearts * 2.0D;
+        double maxHealthValue = currentHearts * 2.0D;
         maxHealth.setBaseValue(maxHealthValue);
+
+        if (player.isDead()) {
+            return;
+        }
 
         if (player.getGameMode() == GameMode.SPECTATOR) {
             player.setGameMode(GameMode.SURVIVAL);
         }
 
-        double newHealth = Math.min(player.getHealth(), maxHealthValue);
-        if (newHealth <= 0) {
-            newHealth = maxHealthValue;
-        }
+        double currentHealth = player.getHealth();
+        double newHealth = currentHealth <= 0.0D
+                ? maxHealthValue
+                : Math.min(currentHealth, maxHealthValue);
 
         player.setHealth(newHealth);
-        applyHeartEffects(player, hearts);
+        applyHeartEffects(player, currentHearts);
     }
 
     private void applyHeartEffects(Player player, int hearts) {
@@ -200,7 +316,7 @@ public class HeartManager {
         List<Player> players = new ArrayList<>();
 
         for (Player player : Bukkit.getOnlinePlayers()) {
-            if (!isEliminated(player)) {
+            if (!isPermanentlyEliminated(player)) {
                 players.add(player);
             }
         }
@@ -211,7 +327,7 @@ public class HeartManager {
     public List<UUID> getAlivePlayerUuids() {
         List<UUID> uuids = new ArrayList<>();
 
-        for (Map.Entry<UUID, Boolean> entry : eliminatedCache.entrySet()) {
+        for (Map.Entry<UUID, Boolean> entry : permanentEliminatedCache.entrySet()) {
             if (!entry.getValue()) {
                 uuids.add(entry.getKey());
             }
@@ -272,7 +388,7 @@ public class HeartManager {
     public int getAlivePlayerCount() {
         int count = 0;
 
-        for (Map.Entry<UUID, Boolean> entry : eliminatedCache.entrySet()) {
+        for (Map.Entry<UUID, Boolean> entry : permanentEliminatedCache.entrySet()) {
             if (!entry.getValue()) {
                 count++;
             }
@@ -284,7 +400,7 @@ public class HeartManager {
     public UUID getSingleRemainingPlayerUuid() {
         UUID winner = null;
 
-        for (Map.Entry<UUID, Boolean> entry : eliminatedCache.entrySet()) {
+        for (Map.Entry<UUID, Boolean> entry : permanentEliminatedCache.entrySet()) {
             if (entry.getValue()) {
                 continue;
             }
@@ -308,8 +424,9 @@ public class HeartManager {
         OfflinePlayer offline = Bukkit.getOfflinePlayer(uuid);
         return offline.getName() != null ? offline.getName() : uuid.toString();
     }
+
     public List<UUID> getAllKnownPlayerUuids() {
-        return new ArrayList<>(heartsCache.keySet());
+        return new ArrayList<>(permanentHeartsCache.keySet());
     }
 
     public UUID getUniqueHighestHeartPlayerUuid() {
@@ -371,4 +488,41 @@ public class HeartManager {
 
         return tie ? null : best;
     }
+    public void setTemporaryPveLoss(Player player, int amount) {
+        UUID uuid = player.getUniqueId();
+
+        if (isPermanentlyEliminated(uuid)) {
+            temporaryPveLossCache.put(uuid, 0);
+            syncPlayer(player);
+            savePlayer(uuid);
+            return;
+        }
+
+        int permanentHearts = getPermanentHearts(uuid);
+        int clamped = Math.max(0, Math.min(amount, permanentHearts));
+
+        temporaryPveLossCache.put(uuid, clamped);
+        syncPlayer(player);
+        savePlayer(uuid);
+    }
+
+    public void revivePlayer(Player player, int hearts) {
+        UUID uuid = player.getUniqueId();
+        int clampedHearts = Math.max(1, hearts);
+
+        permanentHeartsCache.put(uuid, clampedHearts);
+        temporaryPveLossCache.put(uuid, 0);
+        permanentEliminatedCache.put(uuid, false);
+
+        syncPlayer(player);
+        savePlayer(uuid);
+    }
+
+    public void addKills(Player player, int amount) {
+        UUID uuid = player.getUniqueId();
+        int newAmount = Math.max(0, getKills(uuid) + amount);
+        killsCache.put(uuid, newAmount);
+        savePlayer(uuid);
+    }
+
 }

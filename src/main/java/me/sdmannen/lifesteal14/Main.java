@@ -58,7 +58,9 @@ public final class Main extends JavaPlugin {
 
     private void registerCommands() {
         if (getCommand("heartgame") != null) {
-            getCommand("heartgame").setExecutor(new HeartGameCommand(gameManager, heartManager, scoreboardManager));
+            HeartGameCommand commandExecutor = new HeartGameCommand(gameManager, heartManager, scoreboardManager);
+            getCommand("heartgame").setExecutor(commandExecutor);
+            getCommand("heartgame").setTabCompleter(new HeartGameTabCompleter());
         }
     }
 
