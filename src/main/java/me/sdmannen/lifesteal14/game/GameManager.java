@@ -13,6 +13,8 @@ import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
 import org.bukkit.scheduler.BukkitTask;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 
 public class GameManager {
@@ -405,7 +407,7 @@ public class GameManager {
             }
 
             gameEndSecondsRemaining = 0L;
-            endGameNoWinner();
+            endGameByTimeout();
         }, ticks);
     }
 
@@ -677,6 +679,81 @@ public class GameManager {
         }
 
         saveState();
+    }
+    private void endGameByTimeout() {
+        cancelScheduledTasks();
+        removeBossBar();
+        gameState = GameState.ENDED;
+
+        UUID winnerUuid = resolveWinnerByHeartsThenKills();
+
+        if (winnerUuid != null) {
+            winnerName = heartManager.getPlayerName(winnerUuid);
+
+            Bukkit.broadcastMessage("§6Tiden är ute. " + winnerName + " vinner spelet!");
+
+            for (Player player : Bukkit.getOnlinePlayers()) {
+                freezePlayer(player);
+                player.sendTitle("§6§lVINNARE", "§f" + winnerName, 10, 100, 20);
+            }
+        } else {
+            winnerName = "Ingen vinnare";
+
+            Bukkit.broadcastMessage("§cTiden är ute. Spelet slutade oavgjort.");
+
+            for (Player player : Bukkit.getOnlinePlayers()) {
+                freezePlayer(player);
+                player.sendTitle("§c§lGAME OVER", "§fOavgjort", 10, 100, 20);
+            }
+        }
+
+        saveState();
+    }
+
+    private UUID resolveWinnerByHeartsThenKills() {
+        List<UUID> candidates = new ArrayList<>();
+        int bestHearts = Integer.MIN_VALUE;
+
+        for (UUID uuid : heartManager.getAlivePlayerUuids()) {
+            int hearts = heartManager.getHearts(uuid);
+
+            if (hearts > bestHearts) {
+                bestHearts = hearts;
+                candidates.clear();
+                candidates.add(uuid);
+            } else if (hearts == bestHearts) {
+                candidates.add(uuid);
+            }
+        }
+
+        if (candidates.isEmpty()) {
+            return null;
+        }
+
+        if (candidates.size() == 1) {
+            return candidates.get(0);
+        }
+
+        List<UUID> killWinners = new ArrayList<>();
+        int bestKills = Integer.MIN_VALUE;
+
+        for (UUID uuid : candidates) {
+            int kills = heartManager.getKills(uuid);
+
+            if (kills > bestKills) {
+                bestKills = kills;
+                killWinners.clear();
+                killWinners.add(uuid);
+            } else if (kills == bestKills) {
+                killWinners.add(uuid);
+            }
+        }
+
+        if (killWinners.size() == 1) {
+            return killWinners.get(0);
+        }
+
+        return null;
     }
 
     public String getRevealDisplay() {
