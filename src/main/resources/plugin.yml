@@ -1,0 +1,10 @@
+name: Lifesteal14
+version: '${version}'
+
+main: me.sdmannen.lifesteal14.Main
+api-version: '26.1.2'
+load: POSTWORLD
+commands:
+  heartgame:
+    description: Main command for HeartGame
+    usage: /heartgame
