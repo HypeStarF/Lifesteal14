@@ -10,10 +10,12 @@ public class HeartGameCommand implements CommandExecutor {
 
     private final GameManager gameManager;
     private final HeartManager heartManager;
+    private final ScoreboardManager scoreboardManager;
 
-    public HeartGameCommand(GameManager gameManager, HeartManager heartManager) {
+    public HeartGameCommand(GameManager gameManager, HeartManager heartManager, ScoreboardManager scoreboardManager) {
         this.gameManager = gameManager;
         this.heartManager = heartManager;
+        this.scoreboardManager = scoreboardManager;
     }
 
     @Override
@@ -23,6 +25,7 @@ public class HeartGameCommand implements CommandExecutor {
             sender.sendMessage("§e/heartgame start");
             sender.sendMessage("§e/heartgame stop");
             sender.sendMessage("§e/heartgame status");
+            sender.sendMessage("§e/heartgame leaderboard");
             sender.sendMessage("§e/heartgame sethearts <player> <amount>");
             sender.sendMessage("§e/heartgame hearts <player>");
             return true;
@@ -41,6 +44,7 @@ public class HeartGameCommand implements CommandExecutor {
                 sender.sendMessage("§eGameState: " + gameManager.getGameState());
                 sender.sendMessage("§eNether open: " + gameManager.isNetherOpen());
             }
+            case "leaderboard" -> sender.sendMessage(scoreboardManager.buildLeaderboardMessage());
             case "sethearts" -> {
                 if (args.length < 3) {
                     sender.sendMessage("§cAnvänd: /heartgame sethearts <player> <amount>");
@@ -62,6 +66,7 @@ public class HeartGameCommand implements CommandExecutor {
                 }
 
                 heartManager.setHearts(target, amount);
+                scoreboardManager.updateAll();
                 sender.sendMessage("§aSatte " + target.getName() + " till " + amount + " hjärtan.");
             }
             case "hearts" -> {

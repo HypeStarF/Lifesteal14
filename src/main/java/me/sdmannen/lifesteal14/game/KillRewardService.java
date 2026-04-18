@@ -4,17 +4,11 @@ import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
 
-import java.util.HashMap;
-import java.util.Map;
-import java.util.UUID;
-
 public class KillRewardService {
 
     private final JavaPlugin plugin;
     private final HeartManager heartManager;
     private final GameManager gameManager;
-
-    private final Map<String, Long> recentKills = new HashMap<>();
 
     public KillRewardService(JavaPlugin plugin, HeartManager heartManager, GameManager gameManager) {
         this.plugin = plugin;
@@ -40,24 +34,17 @@ public class KillRewardService {
         boolean validKiller = killer != null && !killer.getUniqueId().equals(dead.getUniqueId());
 
         if (validKiller) {
-
-
-
-                if (baseKillerGain > 0) {
-                    heartManager.addHearts(killer, baseKillerGain);
-                }
-
-                if (deadWasUniqueHighest && highestDeathBonus > 0) {
-                    heartManager.addHearts(killer, highestDeathBonus);
-                    killer.sendMessage("§6Du fick +" + highestDeathBonus + " hjärtan eftersom ledaren dog.");
-                }
-
-                heartManager.addKill(killer);
-                markKill(killer.getUniqueId(), dead.getUniqueId());
-            } else {
-                killer.sendMessage("§cAnti-farm: ingen bonus för att döda samma spelare igen så snart.");
+            if (baseKillerGain > 0) {
+                heartManager.addHearts(killer, baseKillerGain);
             }
 
+            if (deadWasUniqueHighest && highestDeathBonus > 0) {
+                heartManager.addHearts(killer, highestDeathBonus);
+                killer.sendMessage("§6Du fick +" + highestDeathBonus + " hjärtan eftersom ledaren dog.");
+            }
+
+            heartManager.addKill(killer);
+        }
 
         if (uniqueLowest != null && lowestBonus > 0) {
             heartManager.addHearts(uniqueLowest, lowestBonus);
@@ -73,12 +60,5 @@ public class KillRewardService {
         } else {
             dead.sendMessage("§cDu har nu " + remainingHearts + " hjärtan kvar.");
         }
-    }
-
-
-
-    private void markKill(UUID killer, UUID victim) {
-        String key = killer + ":" + victim;
-        recentKills.put(key, System.currentTimeMillis());
     }
 }

@@ -11,6 +11,7 @@ import me.sdmannen.lifesteal14.game.PlayerDeathListener;
 import me.sdmannen.lifesteal14.game.PlayerRespawnListener;
 import me.sdmannen.lifesteal14.game.PvpListener;
 import me.sdmannen.lifesteal14.game.QuitListener;
+import me.sdmannen.lifesteal14.game.ScoreboardManager;
 import org.bukkit.plugin.java.JavaPlugin;
 
 public final class Main extends JavaPlugin {
@@ -21,6 +22,7 @@ public final class Main extends JavaPlugin {
     private HeartManager heartManager;
     private KillRewardService killRewardService;
     private PlayerDataStore playerDataStore;
+    private ScoreboardManager scoreboardManager;
 
     @Override
     public void onEnable() {
@@ -32,11 +34,13 @@ public final class Main extends JavaPlugin {
         this.heartManager = new HeartManager(this, playerDataStore);
         this.gameManager = new GameManager(this, heartManager);
         this.killRewardService = new KillRewardService(this, heartManager, gameManager);
+        this.scoreboardManager = new ScoreboardManager(this, heartManager);
 
         registerCommands();
         registerListeners();
 
         heartManager.syncAllOnlinePlayers();
+        scoreboardManager.updateAll();
 
         getLogger().info("Lifesteal14 enabled.");
     }
@@ -45,6 +49,10 @@ public final class Main extends JavaPlugin {
     public void onDisable() {
         if (gameManager != null) {
             gameManager.shutdown();
+        }
+
+        if (scoreboardManager != null) {
+            scoreboardManager.shutdown();
         }
 
         if (heartManager != null) {
@@ -56,7 +64,7 @@ public final class Main extends JavaPlugin {
 
     private void registerCommands() {
         if (getCommand("heartgame") != null) {
-            getCommand("heartgame").setExecutor(new HeartGameCommand(gameManager, heartManager));
+            getCommand("heartgame").setExecutor(new HeartGameCommand(gameManager, heartManager, scoreboardManager));
         }
     }
 
@@ -87,5 +95,9 @@ public final class Main extends JavaPlugin {
 
     public PlayerDataStore getPlayerDataStore() {
         return playerDataStore;
+    }
+
+    public ScoreboardManager getScoreboardManager() {
+        return scoreboardManager;
     }
 }
