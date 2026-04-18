@@ -2,6 +2,7 @@ package me.sdmannen.lifesteal14.game;
 
 import me.sdmannen.lifesteal14.data.GameDataStore;
 import org.bukkit.Bukkit;
+import org.bukkit.Effect;
 import org.bukkit.GameMode;
 import org.bukkit.World;
 import org.bukkit.boss.BarColor;
@@ -11,6 +12,7 @@ import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
+import org.bukkit.potion.PotionType;
 import org.bukkit.scheduler.BukkitTask;
 
 import java.util.ArrayList;
@@ -22,6 +24,7 @@ public class GameManager {
     private static final long GAME_END_SECONDS = 14L * 24L * 60L * 60L;
     private static final long DAY_SECONDS = 24L * 60L * 60L;
     private static final int FINAL_DAY_REVEAL_INTERVAL_SECONDS = 10 * 60;
+    private static final int START_COUNTDOWN_SECONDS = 10;
 
     private final JavaPlugin plugin;
     private final HeartManager heartManager;
@@ -36,6 +39,7 @@ public class GameManager {
     private BukkitTask netherTask;
     private BukkitTask revealTask;
     private BukkitTask gameEndTask;
+    private BukkitTask startCountdownTask;
 
     private BossBar timerBossBar;
 
@@ -44,6 +48,7 @@ public class GameManager {
     private int graceSecondsRemaining;
     private long netherSecondsRemaining;
     private long gameEndSecondsRemaining;
+    private int startCountdownSecondsRemaining;
 
     private int autosaveTickCounter;
 
@@ -56,6 +61,7 @@ public class GameManager {
         this.netherOpen = false;
         this.winnerName = null;
         this.autosaveTickCounter = 0;
+        this.startCountdownSecondsRemaining = 0;
     }
 
     public void loadPersistentState() {
@@ -95,6 +101,8 @@ public class GameManager {
     }
 
     public void restoreAfterRestart() {
+        startCountdownSecondsRemaining = 0;
+
         switch (gameState) {
             case WAITING -> {
                 if (lobbyCageManager.isCreated() && lobbyCageManager.getWorld() != null) {
@@ -154,6 +162,8 @@ public class GameManager {
     }
 
     public void initializeLobby() {
+        cancelStartCountdown();
+
         if (!lobbyCageManager.isCreated()) {
             lobbyCageManager.createCage();
         } else {
@@ -177,6 +187,16 @@ public class GameManager {
             }
 
             prepareWaitingPlayer(player);
+
+            if (isStartCountdownActive() && startCountdownSecondsRemaining > 0) {
+                player.sendTitle(
+                        "§e§l" + startCountdownSecondsRemaining,
+                        "§fSpelet startar snart",
+                        0,
+                        20,
+                        5
+                );
+            }
             return;
         }
 
@@ -211,11 +231,73 @@ public class GameManager {
         heartManager.loadPlayer(player);
     }
 
+    public boolean startGameCountdown() {
+        if (gameState != GameState.WAITING || isStartCountdownActive()) {
+            return false;
+        }
+
+        if (!lobbyCageManager.isCreated()) {
+            lobbyCageManager.createCage();
+            saveState();
+        } else {
+            lobbyCageManager.rebuildCage();
+        }
+
+        for (Player player : Bukkit.getOnlinePlayers()) {
+            prepareWaitingPlayer(player);
+        }
+
+        startCountdownSecondsRemaining = START_COUNTDOWN_SECONDS;
+
+        if (plugin.getConfig().getBoolean("messages.broadcast-game-start", true)) {
+            Bukkit.broadcastMessage("§eSpelet startar om " + START_COUNTDOWN_SECONDS + " sekunder...");
+        }
+
+        startCountdownTask = Bukkit.getScheduler().runTaskTimer(plugin, () -> {
+            if (gameState != GameState.WAITING) {
+                cancelStartCountdown();
+                return;
+            }
+
+            if (startCountdownSecondsRemaining > 0) {
+                for (Player player : Bukkit.getOnlinePlayers()) {
+                    player.sendTitle(
+                            "§e§l" + startCountdownSecondsRemaining,
+                            "§fGör er redo",
+                            0,
+                            20,
+                            5
+                    );
+                }
+
+                startCountdownSecondsRemaining--;
+                return;
+            }
+
+            for (Player player : Bukkit.getOnlinePlayers()) {
+                player.addPotionEffect(new PotionEffect(PotionEffectType.SATURATION, 20, 20));
+                player.addPotionEffect(new PotionEffect(PotionEffectType.SATURATION, 10, 2));
+
+                player.sendTitle("§a§lGO!", "", 0, 30, 10);
+            }
+
+            cancelStartCountdown();
+            startGameNow();
+        }, 0L, 20L);
+
+        return true;
+    }
+
     public void startGame() {
+        startGameNow();
+    }
+
+    private void startGameNow() {
         if (gameState != GameState.WAITING) {
             return;
         }
 
+        cancelStartCountdown();
         cancelScheduledTasks();
         removeBossBar();
 
@@ -256,6 +338,7 @@ public class GameManager {
     }
 
     public void stopGame() {
+        cancelStartCountdown();
         cancelScheduledTasks();
         removeBossBar();
         gameState = GameState.ENDED;
@@ -269,6 +352,7 @@ public class GameManager {
     }
 
     public void shutdown() {
+        cancelStartCountdown();
         cancelScheduledTasks();
         removeBossBar();
         saveState();
@@ -488,7 +572,13 @@ public class GameManager {
 
         if (gameState == GameState.WAITING) {
             timerBossBar.setColor(BarColor.YELLOW);
-            timerBossBar.setTitle("§7Väntar på start");
+
+            if (isStartCountdownActive()) {
+                timerBossBar.setTitle("§eStart om " + startCountdownSecondsRemaining + "s");
+            } else {
+                timerBossBar.setTitle("§7Väntar på start");
+            }
+
             timerBossBar.setProgress(1.0D);
             return;
         }
@@ -616,6 +706,14 @@ public class GameManager {
         }
     }
 
+    private void cancelStartCountdown() {
+        if (startCountdownTask != null) {
+            startCountdownTask.cancel();
+            startCountdownTask = null;
+        }
+        startCountdownSecondsRemaining = 0;
+    }
+
     private void cancelScheduledTasks() {
         if (graceTask != null) {
             graceTask.cancel();
@@ -654,6 +752,7 @@ public class GameManager {
 
         winnerName = heartManager.getPlayerName(winnerUuid);
 
+        cancelStartCountdown();
         cancelScheduledTasks();
         removeBossBar();
         gameState = GameState.ENDED;
@@ -669,6 +768,7 @@ public class GameManager {
     }
 
     private void endGameNoWinner() {
+        cancelStartCountdown();
         cancelScheduledTasks();
         removeBossBar();
         gameState = GameState.ENDED;
@@ -683,7 +783,9 @@ public class GameManager {
 
         saveState();
     }
+
     private void endGameByTimeout() {
+        cancelStartCountdown();
         cancelScheduledTasks();
         removeBossBar();
         gameState = GameState.ENDED;
@@ -761,7 +863,7 @@ public class GameManager {
 
     public String getRevealDisplay() {
         if (gameState == GameState.WAITING) {
-            return "Ej startat";
+            return isStartCountdownActive() ? "Start om " + startCountdownSecondsRemaining + "s" : "Ej startat";
         }
 
         if (gameState == GameState.GRACE) {
@@ -831,6 +933,7 @@ public class GameManager {
 
         return formatLongTime(gameEndSecondsRemaining);
     }
+
     private int getCurrentRevealIntervalSeconds() {
         if (gameEndSecondsRemaining > 0 && gameEndSecondsRemaining <= DAY_SECONDS) {
             return FINAL_DAY_REVEAL_INTERVAL_SECONDS;
@@ -845,17 +948,6 @@ public class GameManager {
         return String.format("%02d:%02d", minutes, seconds);
     }
 
-//    private String formatLongTime(long totalSeconds) {
-//        long days = totalSeconds / 86400;
-//        long hours = (totalSeconds % 86400) / 3600;
-//        long minutes = (totalSeconds % 3600) / 60;
-//
-//        if (days > 0) {
-//            return days + "d " + hours + "h";
-//        }
-//
-//        return String.format("%02d:%02d", hours, minutes);
-//    }
     private String formatLongTime(long totalSeconds) {
         long clamped = Math.max(0L, totalSeconds);
 
@@ -864,24 +956,21 @@ public class GameManager {
         long minutes = (clamped % 3600) / 60;
         long seconds = clamped % 60;
 
-        // Fall 1: Har dagar → visa D/H/M
         if (days > 0) {
             return days + "d " + hours + "h " + minutes + "m";
         }
 
-        // Fall 2: Har timmar → visa H/M/S
         if (hours > 0) {
             return hours + "h " + minutes + "m " + seconds + "s";
         }
 
-        // Fall 3: Under 1 timme → visa M/S
         if (minutes > 0) {
             return minutes + "m " + seconds + "s";
         }
 
-        // Fall 4: Bara sekunder
         return seconds + "s";
     }
+
     public GameState getGameState() {
         return gameState;
     }
@@ -928,5 +1017,13 @@ public class GameManager {
 
     public String getWinnerName() {
         return winnerName;
+    }
+
+    public boolean isStartCountdownActive() {
+        return startCountdownTask != null;
+    }
+
+    public int getStartCountdownSecondsRemaining() {
+        return startCountdownSecondsRemaining;
     }
 }

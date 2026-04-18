@@ -47,9 +47,24 @@ public class HeartGameCommand implements CommandExecutor {
             case "help" -> sendHelp(sender);
 
             case "start" -> {
-                gameManager.startGame();
+                if (gameManager.isStartCountdownActive()) {
+                    sender.sendMessage("§cStartcountdown är redan igång.");
+                    return true;
+                }
+
+                if (gameManager.getGameState() != GameState.WAITING) {
+                    sender.sendMessage("§cSpelet kan bara startas från WAITING.");
+                    return true;
+                }
+
+                boolean started = gameManager.startGameCountdown();
                 scoreboardManager.updateAll();
-                sender.sendMessage("§aStartade spelet.");
+
+                if (started) {
+                    sender.sendMessage("§aStartcountdown på 10 sekunder har börjat.");
+                } else {
+                    sender.sendMessage("§cKunde inte starta countdown.");
+                }
             }
 
             case "stop" -> {
@@ -303,6 +318,8 @@ public class HeartGameCommand implements CommandExecutor {
         sender.sendMessage("§eActive: §f" + gameManager.isActive());
         sender.sendMessage("§eGrace: §f" + gameManager.isGracePeriod());
         sender.sendMessage("§eRunning: §f" + gameManager.isRunning());
+        sender.sendMessage("§eStart countdown active: §f" + gameManager.isStartCountdownActive());
+        sender.sendMessage("§eStart countdown remaining: §f" + gameManager.getStartCountdownSecondsRemaining());
         sender.sendMessage("§eNether open: §f" + gameManager.isNetherOpen());
         sender.sendMessage("§eReveal display: §f" + gameManager.getRevealDisplay());
         sender.sendMessage("§ePvE regen display: §f" + gameManager.getNextPveRegenDisplay());

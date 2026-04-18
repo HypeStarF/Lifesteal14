@@ -28,11 +28,11 @@ public class LobbyCageManager {
 
         int centerX = world.getSpawnLocation().getBlockX();
         int centerZ = world.getSpawnLocation().getBlockZ();
-        int floorY = world.getHighestBlockYAt(centerX, centerZ) + 1;
+        int floorY = world.getHighestBlockYAt(centerX, centerZ) + 20;
 
         minX = centerX - 3;
         maxX = centerX + 3;
-        minY = floorY + 20;
+        minY = floorY;
         maxY = floorY + 4;
         minZ = centerZ - 3;
         maxZ = centerZ + 3;

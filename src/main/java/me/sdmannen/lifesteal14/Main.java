@@ -42,6 +42,7 @@ public final class Main extends JavaPlugin {
         gameManager.restoreAfterRestart();
         scoreboardManager.updateAll();
 
+
         getLogger().info("Lifesteal14 enabled.");
         getLogger().info("Loaded game state: " + gameManager.getGameState());
         getLogger().info("Grace remaining: " + gameManager.getGraceSecondsRemaining());
@@ -50,6 +51,8 @@ public final class Main extends JavaPlugin {
         getLogger().info("Game end remaining: " + gameManager.getGameEndSecondsRemaining());
         getLogger().info("Nether open: " + gameManager.isNetherOpen());
         getLogger().info("Known players loaded: " + heartManager.getAllKnownPlayerUuids().size());
+        getServer().getWorlds().get(0).getWorldBorder().changeSize(1000,1000);
+        getServer().getWorlds().get(1).getWorldBorder().changeSize(180,180);
     }
 
     @Override
