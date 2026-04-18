@@ -1,17 +1,7 @@
 package me.sdmannen.lifesteal14;
 
 import me.sdmannen.lifesteal14.data.PlayerDataStore;
-import me.sdmannen.lifesteal14.game.GameManager;
-import me.sdmannen.lifesteal14.game.HeartGameCommand;
-import me.sdmannen.lifesteal14.game.HeartManager;
-import me.sdmannen.lifesteal14.game.JoinListener;
-import me.sdmannen.lifesteal14.game.KillRewardService;
-import me.sdmannen.lifesteal14.game.NetherListener;
-import me.sdmannen.lifesteal14.game.PlayerDeathListener;
-import me.sdmannen.lifesteal14.game.PlayerRespawnListener;
-import me.sdmannen.lifesteal14.game.PvpListener;
-import me.sdmannen.lifesteal14.game.QuitListener;
-import me.sdmannen.lifesteal14.game.ScoreboardManager;
+import me.sdmannen.lifesteal14.game.*;
 import org.bukkit.plugin.java.JavaPlugin;
 
 public final class Main extends JavaPlugin {
@@ -34,12 +24,13 @@ public final class Main extends JavaPlugin {
         this.heartManager = new HeartManager(this, playerDataStore);
         this.gameManager = new GameManager(this, heartManager);
         this.killRewardService = new KillRewardService(this, heartManager, gameManager);
-        this.scoreboardManager = new ScoreboardManager(this, heartManager);
+        this.scoreboardManager = new ScoreboardManager(this, heartManager, gameManager);
 
         registerCommands();
         registerListeners();
 
         heartManager.syncAllOnlinePlayers();
+        gameManager.initializeLobby();
         scoreboardManager.updateAll();
 
         getLogger().info("Lifesteal14 enabled.");
@@ -58,6 +49,9 @@ public final class Main extends JavaPlugin {
         if (heartManager != null) {
             heartManager.saveAll();
         }
+        if (scoreboardManager != null) {
+            scoreboardManager.shutdown();
+        }
 
         getLogger().info("Lifesteal14 disabled.");
     }
@@ -69,7 +63,7 @@ public final class Main extends JavaPlugin {
     }
 
     private void registerListeners() {
-        getServer().getPluginManager().registerEvents(new JoinListener(heartManager), this);
+        getServer().getPluginManager().registerEvents(new JoinListener(heartManager, gameManager), this);
         getServer().getPluginManager().registerEvents(new QuitListener(heartManager), this);
         getServer().getPluginManager().registerEvents(new PlayerRespawnListener(this, heartManager), this);
         getServer().getPluginManager().registerEvents(new PlayerDeathListener(gameManager, killRewardService), this);

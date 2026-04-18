@@ -15,10 +15,12 @@ public class ScoreboardManager {
 
     private final Main plugin;
     private final HeartManager heartManager;
+    private final GameManager gameManager;
 
-    public ScoreboardManager(Main plugin, HeartManager heartManager) {
+    public ScoreboardManager(Main plugin, HeartManager heartManager, GameManager gameManager) {
         this.plugin = plugin;
         this.heartManager = heartManager;
+        this.gameManager = gameManager;
 
         startUpdater();
     }
@@ -28,7 +30,6 @@ public class ScoreboardManager {
     }
 
     public void shutdown() {
-        // Ingen bossbar här längre
     }
 
     public void updateAll() {
@@ -46,17 +47,22 @@ public class ScoreboardManager {
         LeaderData mostKills = getMostKills();
         LeaderData lowest = getLowestHearts();
 
-        setLine(objective, " ", 9);
-        setLine(objective, "§eFlest hjärtan:", 8);
-        setLine(objective, formatLeaderLine(highest, LeaderType.HEARTS), 7);
+        setLine(objective, "§7State: §f" + gameManager.getGameState().name(), 13);
+        setLine(objective, "§eGrace: §f" + gameManager.getGraceDisplay(), 12);
+        setLine(objective, "§6Reveal: §f" + gameManager.getRevealDisplay(), 11);
+        setLine(objective, "§cNether: §f" + gameManager.getNetherDisplay(), 10);
+        setLine(objective, "§aGame ends: §f" + gameManager.getGameEndDisplay(), 9);
 
-        setLine(objective, "  ", 6);
-        setLine(objective, "§cFlest kills:", 5);
-        setLine(objective, formatLeaderLine(mostKills, LeaderType.KILLS), 4);
+        setLine(objective, " ", 8);
+        setLine(objective, "§eFlest hjärtan:", 7);
+        setLine(objective, formatLeaderLine(highest, LeaderType.HEARTS), 6);
 
-        setLine(objective, "   ", 3);
-        setLine(objective, "§bMinst hjärtan:", 2);
-        setLine(objective, formatLeaderLine(lowest, LeaderType.HEARTS), 1);
+        setLine(objective, "  ", 5);
+        setLine(objective, "§cFlest kills:", 4);
+        setLine(objective, formatLeaderLine(mostKills, LeaderType.KILLS), 3);
+
+        setLine(objective, "   ", 2);
+        setLine(objective, "§bMinst hjärtan: " + formatLeaderLine(lowest, LeaderType.HEARTS), 1);
 
         player.setScoreboard(scoreboard);
     }
@@ -150,11 +156,7 @@ public class ScoreboardManager {
             }
         }
 
-        if (winners.isEmpty()) {
-            return null;
-        }
-
-        return new LeaderData(best, winners);
+        return winners.isEmpty() ? null : new LeaderData(best, winners);
     }
 
     private LeaderData getLowestHearts() {
@@ -182,11 +184,7 @@ public class ScoreboardManager {
             }
         }
 
-        if (losers.isEmpty()) {
-            return null;
-        }
-
-        return new LeaderData(lowest, losers);
+        return losers.isEmpty() ? null : new LeaderData(lowest, losers);
     }
 
     private LeaderData getMostKills() {
@@ -214,11 +212,7 @@ public class ScoreboardManager {
             }
         }
 
-        if (winners.isEmpty()) {
-            return null;
-        }
-
-        return new LeaderData(best, winners);
+        return winners.isEmpty() ? null : new LeaderData(best, winners);
     }
 
     private enum LeaderType {
