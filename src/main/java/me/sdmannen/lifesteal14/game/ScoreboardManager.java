@@ -47,8 +47,7 @@ public class ScoreboardManager {
         LeaderData mostKills = getMostKills();
         LeaderData lowest = getLowestHearts();
 
-        setLine(objective, "§7State: §f" + gameManager.getGameState().name(), 13);
-        setLine(objective, "§eGrace: §f" + gameManager.getGraceDisplay(), 12);
+        setLine(objective, "§7State: §f" + gameManager.getGameState().name(), 12);
         setLine(objective, "§6Reveal: §f" + gameManager.getRevealDisplay(), 11);
         setLine(objective, "§cNether: §f" + gameManager.getNetherDisplay(), 10);
         setLine(objective, "§aGame ends: §f" + gameManager.getGameEndDisplay(), 9);
@@ -62,7 +61,8 @@ public class ScoreboardManager {
         setLine(objective, formatLeaderLine(mostKills, LeaderType.KILLS), 3);
 
         setLine(objective, "   ", 2);
-        setLine(objective, "§bMinst hjärtan: " + formatLeaderLine(lowest, LeaderType.HEARTS), 1);
+        setLine(objective, "§bMinst hjärtan: ", 1);
+        setLine(objective, formatLeaderLine(lowest, LeaderType.HEARTS), 0);
 
         player.setScoreboard(scoreboard);
     }

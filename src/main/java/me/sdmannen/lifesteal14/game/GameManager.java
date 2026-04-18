@@ -16,6 +16,8 @@ import java.util.UUID;
 
 public class GameManager {
 
+    private static final long GAME_END_SECONDS = 14L * 24L * 60L * 60L;
+
     private final JavaPlugin plugin;
     private final HeartManager heartManager;
     private final LobbyCageManager lobbyCageManager;
@@ -27,12 +29,15 @@ public class GameManager {
     private BukkitTask graceTask;
     private BukkitTask netherTask;
     private BukkitTask revealTask;
+    private BukkitTask gameEndTask;
 
-    private BossBar revealBossBar;
+    private BossBar timerBossBar;
+
     private int secondsUntilReveal;
     private int revealIntervalSeconds;
     private int graceSecondsRemaining;
     private long netherSecondsRemaining;
+    private long gameEndSecondsRemaining;
 
     public GameManager(JavaPlugin plugin, HeartManager heartManager) {
         this.plugin = plugin;
@@ -93,6 +98,13 @@ public class GameManager {
         gameState = GameState.GRACE;
         netherOpen = false;
 
+        //graceSecondsRemaining = plugin.getConfig().getInt("timers.grace-hours", 1) * 60 * 60;
+        graceSecondsRemaining = plugin.getConfig().getInt("timers.grace-hours", 1) * 60;
+        revealIntervalSeconds = plugin.getConfig().getInt("timers.reveal-interval-minutes", 60) * 60;
+        secondsUntilReveal = revealIntervalSeconds;
+        netherSecondsRemaining = plugin.getConfig().getLong("timers.nether-days", 8L) * 24L * 60L * 60L;
+        gameEndSecondsRemaining = GAME_END_SECONDS;
+
         lobbyCageManager.removeCage();
 
         for (Player player : Bukkit.getOnlinePlayers()) {
@@ -107,7 +119,10 @@ public class GameManager {
 
         startGracePeriodTimer();
         startNetherTimer();
-        startRevealSystem();
+        startGameEndTimer();
+        startMainTimerLoop();
+        createTimerBossBar();
+        updateTimerBossBar();
     }
 
     public void stopGame() {
@@ -124,8 +139,7 @@ public class GameManager {
     }
 
     private void startGracePeriodTimer() {
-        graceSecondsRemaining = plugin.getConfig().getInt("timers.grace-hours", 1) * 60 * 60;
-        long ticks = graceSecondsRemaining * 20L;
+        long ticks = Math.max(1L, graceSecondsRemaining) * 20L;
 
         graceTask = Bukkit.getScheduler().runTaskLater(plugin, () -> {
             graceTask = null;
@@ -133,14 +147,14 @@ public class GameManager {
             if (gameState == GameState.GRACE) {
                 graceSecondsRemaining = 0;
                 gameState = GameState.RUNNING;
+                secondsUntilReveal = revealIntervalSeconds;
                 Bukkit.broadcastMessage("§cGrace period är slut. PvP är nu aktiverat.");
             }
         }, ticks);
     }
 
     private void startNetherTimer() {
-        netherSecondsRemaining = plugin.getConfig().getLong("timers.nether-days", 8L) * 24L * 60L * 60L;
-        long ticks = netherSecondsRemaining * 20L;
+        long ticks = Math.max(1L, netherSecondsRemaining) * 20L;
 
         netherTask = Bukkit.getScheduler().runTaskLater(plugin, () -> {
             netherTask = null;
@@ -153,13 +167,22 @@ public class GameManager {
         }, ticks);
     }
 
-    private void startRevealSystem() {
-        revealIntervalSeconds = plugin.getConfig().getInt("timers.reveal-interval-minutes", 60) * 60;
-        secondsUntilReveal = revealIntervalSeconds;
+    private void startGameEndTimer() {
+        long ticks = GAME_END_SECONDS * 20L;
 
-        revealBossBar = Bukkit.createBossBar("§eReveal pausad", BarColor.YELLOW, BarStyle.SOLID);
-        revealBossBar.setVisible(true);
+        gameEndTask = Bukkit.getScheduler().runTaskLater(plugin, () -> {
+            gameEndTask = null;
 
+            if (!isActive()) {
+                return;
+            }
+
+            gameEndSecondsRemaining = 0L;
+            endGameNoWinner();
+        }, ticks);
+    }
+
+    private void startMainTimerLoop() {
         revealTask = Bukkit.getScheduler().runTaskTimer(plugin, () -> {
             if (gameState == GameState.GRACE && graceSecondsRemaining > 0) {
                 graceSecondsRemaining--;
@@ -169,12 +192,11 @@ public class GameManager {
                 netherSecondsRemaining--;
             }
 
-            if (!isActive()) {
-                updateRevealBar();
-                return;
+            if (isActive() && gameEndSecondsRemaining > 0) {
+                gameEndSecondsRemaining--;
             }
 
-            if (canRunRevealCountdown()) {
+            if (gameState == GameState.RUNNING && canRunRevealCountdown()) {
                 secondsUntilReveal = Math.max(0, secondsUntilReveal - 1);
 
                 if (secondsUntilReveal <= 0) {
@@ -183,10 +205,77 @@ public class GameManager {
                 }
             }
 
-            updateRevealBar();
+            updateTimerBossBar();
         }, 20L, 20L);
+    }
 
-        updateRevealBar();
+    private void createTimerBossBar() {
+        timerBossBar = Bukkit.createBossBar("§eGrace", BarColor.YELLOW, BarStyle.SOLID);
+        timerBossBar.setVisible(true);
+    }
+
+    private void updateTimerBossBar() {
+        if (timerBossBar == null) {
+            return;
+        }
+
+        timerBossBar.removeAll();
+
+        for (Player player : heartManager.getAliveOnlinePlayers()) {
+            timerBossBar.addPlayer(player);
+        }
+
+        if (gameState == GameState.WAITING) {
+            timerBossBar.setTitle("§7Väntar på start");
+            timerBossBar.setProgress(1.0D);
+            return;
+        }
+
+        if (gameState == GameState.ENDED) {
+            timerBossBar.setTitle("§6Spelet är slut");
+            timerBossBar.setProgress(1.0D);
+            return;
+        }
+
+        if (gameState == GameState.GRACE) {
+            timerBossBar.setColor(BarColor.YELLOW);
+            timerBossBar.setTitle("§eGrace slutar om " + formatClock(graceSecondsRemaining));
+
+            int totalGrace = plugin.getConfig().getInt("timers.grace-hours", 1) * 60 * 60;
+            if (totalGrace <= 0) {
+                timerBossBar.setProgress(1.0D);
+            } else {
+                double progress = Math.max(0.0D, Math.min(1.0D, (double) graceSecondsRemaining / (double) totalGrace));
+                timerBossBar.setProgress(progress);
+            }
+            return;
+        }
+
+        Player leader = getOnlineHighestHeartLeader();
+        timerBossBar.setColor(BarColor.YELLOW);
+
+        if (leader == null) {
+            UUID leaderUuid = heartManager.getUniqueHighestHeartPlayerUuid();
+
+            if (leaderUuid == null) {
+                timerBossBar.setTitle("§7Reveal pausad - delad ledning");
+            } else {
+                timerBossBar.setTitle("§7Reveal pausad - ledaren är offline");
+            }
+
+            timerBossBar.setProgress(1.0D);
+            return;
+        }
+
+        timerBossBar.setTitle("§eReveal om " + formatClock(secondsUntilReveal) + " §7| §f" + leader.getName());
+
+        if (revealIntervalSeconds <= 0) {
+            timerBossBar.setProgress(1.0D);
+            return;
+        }
+
+        double progress = Math.max(0.0D, Math.min(1.0D, (double) secondsUntilReveal / (double) revealIntervalSeconds));
+        timerBossBar.setProgress(progress);
     }
 
     private Player getOnlineHighestHeartLeader() {
@@ -204,7 +293,7 @@ public class GameManager {
     }
 
     private boolean canRunRevealCountdown() {
-        return isActive() && getOnlineHighestHeartLeader() != null;
+        return getOnlineHighestHeartLeader() != null;
     }
 
     private void doHourlyReveal() {
@@ -226,49 +315,6 @@ public class GameManager {
                 + " §7(" + leader.getLocation().getBlockX()
                 + ", " + leader.getLocation().getBlockY()
                 + ", " + leader.getLocation().getBlockZ() + ")");
-    }
-
-    private void updateRevealBar() {
-        if (revealBossBar == null) {
-            return;
-        }
-
-        revealBossBar.removeAll();
-
-        for (Player player : heartManager.getAliveOnlinePlayers()) {
-            revealBossBar.addPlayer(player);
-        }
-
-        if (!isActive()) {
-            revealBossBar.setTitle("§7Ingen aktiv match");
-            revealBossBar.setProgress(1.0D);
-            return;
-        }
-
-        Player leader = getOnlineHighestHeartLeader();
-
-        if (leader == null) {
-            UUID leaderUuid = heartManager.getUniqueHighestHeartPlayerUuid();
-
-            if (leaderUuid == null) {
-                revealBossBar.setTitle("§7Reveal pausad - delad ledning");
-            } else {
-                revealBossBar.setTitle("§7Reveal pausad - ledaren är offline");
-            }
-
-            revealBossBar.setProgress(1.0D);
-            return;
-        }
-
-        revealBossBar.setTitle("§eReveal om " + formatClock(secondsUntilReveal) + " §7| §f" + leader.getName());
-
-        if (revealIntervalSeconds <= 0) {
-            revealBossBar.setProgress(1.0D);
-            return;
-        }
-
-        double progress = Math.max(0.0D, Math.min(1.0D, (double) secondsUntilReveal / (double) revealIntervalSeconds));
-        revealBossBar.setProgress(progress);
     }
 
     private void freezeAllPlayers() {
@@ -294,10 +340,10 @@ public class GameManager {
     }
 
     private void removeBossBar() {
-        if (revealBossBar != null) {
-            revealBossBar.removeAll();
-            revealBossBar.setVisible(false);
-            revealBossBar = null;
+        if (timerBossBar != null) {
+            timerBossBar.removeAll();
+            timerBossBar.setVisible(false);
+            timerBossBar = null;
         }
     }
 
@@ -315,6 +361,11 @@ public class GameManager {
         if (revealTask != null) {
             revealTask.cancel();
             revealTask = null;
+        }
+
+        if (gameEndTask != null) {
+            gameEndTask.cancel();
+            gameEndTask = null;
         }
     }
 
@@ -346,17 +397,30 @@ public class GameManager {
         }
     }
 
-    public String getGraceDisplay() {
-        return switch (gameState) {
-            case WAITING -> "Väntar";
-            case ENDED -> "Avslutat";
-            case RUNNING -> "Slut";
-            case GRACE -> formatClock(Math.max(0, graceSecondsRemaining));
-        };
+    private void endGameNoWinner() {
+        cancelScheduledTasks();
+        removeBossBar();
+        gameState = GameState.ENDED;
+        winnerName = "Ingen vinnare";
+
+        Bukkit.broadcastMessage("§cTiden är ute. Spelet är slut.");
+
+        for (Player player : Bukkit.getOnlinePlayers()) {
+            freezePlayer(player);
+            player.sendTitle("§c§lGAME OVER", "§fIngen vinnare", 10, 100, 20);
+        }
     }
 
     public String getRevealDisplay() {
-        if (!isActive()) {
+        if (gameState == GameState.WAITING) {
+            return "Ej startat";
+        }
+
+        if (gameState == GameState.GRACE) {
+            return "Efter grace";
+        }
+
+        if (gameState == GameState.ENDED) {
             return "Av";
         }
 
@@ -390,15 +454,15 @@ public class GameManager {
     }
 
     public String getGameEndDisplay() {
+        if (gameState == GameState.WAITING) {
+            return "14d";
+        }
+
         if (gameState == GameState.ENDED) {
             return winnerName != null ? winnerName : "Avslutat";
         }
 
-        if (isActive()) {
-            return "1 kvar";
-        }
-
-        return "Ej startat";
+        return formatLongTime(gameEndSecondsRemaining);
     }
 
     private String formatClock(long totalSeconds) {
