@@ -29,9 +29,9 @@ public final class Main extends JavaPlugin {
         saveDefaultConfig();
 
         this.playerDataStore = new PlayerDataStore(this);
-        this.heartManager = new HeartManager(playerDataStore);
-        this.killRewardService = new KillRewardService(heartManager);
+        this.heartManager = new HeartManager(this, playerDataStore);
         this.gameManager = new GameManager(this, heartManager);
+        this.killRewardService = new KillRewardService(this, heartManager, gameManager);
 
         registerCommands();
         registerListeners();

@@ -15,11 +15,7 @@ public class NetherListener implements Listener {
 
     @EventHandler
     public void onPlayerPortal(PlayerPortalEvent event) {
-        if (event.getTo() == null) {
-            return;
-        }
-
-        if (event.getTo().getWorld() == null) {
+        if (event.getTo() == null || event.getTo().getWorld() == null) {
             return;
         }
 

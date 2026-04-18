@@ -32,7 +32,7 @@ public class PvpListener implements Listener {
             event.setCancelled(true);
 
             if (!attacker.getUniqueId().equals(victim.getUniqueId())) {
-                attacker.sendMessage("§cPvP is turned off during the grace period.");
+                attacker.sendMessage("§cPvP är avstängt under grace period.");
             }
         }
     }

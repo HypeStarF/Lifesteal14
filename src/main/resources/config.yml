@@ -1,0 +1,14 @@
+timers:
+  grace-hours: 1
+  nether-days: 8
+  reveal-interval-minutes: 60
+
+hearts:
+  default: 10
+  base-death-loss: 1
+  base-killer-gain: 1
+  highest-death-bonus: 2
+  lowest-bonus: 2
+
+anti-farm:
+  cooldown-minutes: 60

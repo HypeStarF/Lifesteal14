@@ -1,35 +1,42 @@
 package me.sdmannen.lifesteal14.game;
 
+import me.sdmannen.lifesteal14.Main;
 import me.sdmannen.lifesteal14.data.PlayerDataStore;
 import org.bukkit.Bukkit;
 import org.bukkit.GameMode;
+import org.bukkit.OfflinePlayer;
 import org.bukkit.attribute.Attribute;
 import org.bukkit.attribute.AttributeInstance;
 import org.bukkit.entity.Player;
+import org.bukkit.potion.PotionEffect;
+import org.bukkit.potion.PotionEffectType;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
 public class HeartManager {
 
-    private static final int DEFAULT_HEARTS = 10;
-    private static final int MIN_HEARTS = 0;
-
+    private final Main plugin;
     private final PlayerDataStore dataStore;
+    private final int defaultHearts;
 
     private final Map<UUID, Integer> heartsCache = new HashMap<>();
     private final Map<UUID, Boolean> eliminatedCache = new HashMap<>();
     private final Map<UUID, Integer> killsCache = new HashMap<>();
 
-    public HeartManager(PlayerDataStore dataStore) {
+    public HeartManager(Main plugin, PlayerDataStore dataStore) {
+        this.plugin = plugin;
         this.dataStore = dataStore;
+        this.defaultHearts = plugin.getConfig().getInt("hearts.default", 10);
     }
 
     public void loadPlayer(Player player) {
         UUID uuid = player.getUniqueId();
 
-        int hearts = dataStore.getHearts(uuid, DEFAULT_HEARTS);
+        int hearts = dataStore.getHearts(uuid, defaultHearts);
         boolean eliminated = dataStore.isEliminated(uuid) || hearts <= 0;
         int kills = dataStore.getKills(uuid);
 
@@ -43,7 +50,7 @@ public class HeartManager {
     public void savePlayer(Player player) {
         UUID uuid = player.getUniqueId();
 
-        dataStore.setHearts(uuid, heartsCache.getOrDefault(uuid, DEFAULT_HEARTS));
+        dataStore.setHearts(uuid, heartsCache.getOrDefault(uuid, defaultHearts));
         dataStore.setEliminated(uuid, eliminatedCache.getOrDefault(uuid, false));
         dataStore.setKills(uuid, killsCache.getOrDefault(uuid, 0));
         dataStore.save();
@@ -51,7 +58,7 @@ public class HeartManager {
 
     public void saveAll() {
         for (UUID uuid : heartsCache.keySet()) {
-            dataStore.setHearts(uuid, heartsCache.getOrDefault(uuid, DEFAULT_HEARTS));
+            dataStore.setHearts(uuid, heartsCache.getOrDefault(uuid, defaultHearts));
             dataStore.setEliminated(uuid, eliminatedCache.getOrDefault(uuid, false));
             dataStore.setKills(uuid, killsCache.getOrDefault(uuid, 0));
         }
@@ -59,11 +66,15 @@ public class HeartManager {
     }
 
     public int getHearts(Player player) {
-        return heartsCache.getOrDefault(player.getUniqueId(), DEFAULT_HEARTS);
+        return heartsCache.getOrDefault(player.getUniqueId(), defaultHearts);
+    }
+
+    public int getHearts(UUID uuid) {
+        return heartsCache.getOrDefault(uuid, defaultHearts);
     }
 
     public void setHearts(Player player, int amount) {
-        int clamped = Math.max(MIN_HEARTS, amount);
+        int clamped = Math.max(0, amount);
         UUID uuid = player.getUniqueId();
 
         heartsCache.put(uuid, clamped);
@@ -85,6 +96,10 @@ public class HeartManager {
         return eliminatedCache.getOrDefault(player.getUniqueId(), false);
     }
 
+    public boolean isEliminated(UUID uuid) {
+        return eliminatedCache.getOrDefault(uuid, false);
+    }
+
     public void eliminate(Player player) {
         UUID uuid = player.getUniqueId();
         heartsCache.put(uuid, 0);
@@ -98,6 +113,10 @@ public class HeartManager {
         return killsCache.getOrDefault(player.getUniqueId(), 0);
     }
 
+    public int getKills(UUID uuid) {
+        return killsCache.getOrDefault(uuid, 0);
+    }
+
     public void addKill(Player player) {
         UUID uuid = player.getUniqueId();
         killsCache.put(uuid, getKills(player) + 1);
@@ -108,7 +127,7 @@ public class HeartManager {
         UUID uuid = player.getUniqueId();
 
         if (!heartsCache.containsKey(uuid)) {
-            heartsCache.put(uuid, dataStore.getHearts(uuid, DEFAULT_HEARTS));
+            heartsCache.put(uuid, dataStore.getHearts(uuid, defaultHearts));
         }
 
         if (!killsCache.containsKey(uuid)) {
@@ -116,7 +135,7 @@ public class HeartManager {
         }
 
         if (!eliminatedCache.containsKey(uuid)) {
-            boolean eliminated = dataStore.isEliminated(uuid) || heartsCache.getOrDefault(uuid, DEFAULT_HEARTS) <= 0;
+            boolean eliminated = dataStore.isEliminated(uuid) || heartsCache.getOrDefault(uuid, defaultHearts) <= 0;
             eliminatedCache.put(uuid, eliminated);
         }
 
@@ -131,6 +150,8 @@ public class HeartManager {
         }
 
         int hearts = getHearts(player);
+
+        player.removePotionEffect(PotionEffectType.STRENGTH);
 
         if (hearts <= 0) {
             maxHealth.setBaseValue(2.0D);
@@ -156,11 +177,123 @@ public class HeartManager {
         }
 
         player.setHealth(newHealth);
+        applyHeartEffects(player, hearts);
+    }
+
+    private void applyHeartEffects(Player player, int hearts) {
+        if (hearts == 4) {
+            player.addPotionEffect(new PotionEffect(PotionEffectType.STRENGTH, Integer.MAX_VALUE, 0, false, false, true));
+        } else if (hearts == 3) {
+            player.addPotionEffect(new PotionEffect(PotionEffectType.STRENGTH, Integer.MAX_VALUE, 1, false, false, true));
+        } else if (hearts > 0 && hearts <= 2) {
+            player.addPotionEffect(new PotionEffect(PotionEffectType.STRENGTH, Integer.MAX_VALUE, 2, false, false, true));
+        }
     }
 
     public void syncAllOnlinePlayers() {
         for (Player player : Bukkit.getOnlinePlayers()) {
             ensurePlayerExists(player);
         }
+    }
+
+    public List<Player> getAliveOnlinePlayers() {
+        List<Player> players = new ArrayList<>();
+
+        for (Player player : Bukkit.getOnlinePlayers()) {
+            if (!isEliminated(player)) {
+                players.add(player);
+            }
+        }
+
+        return players;
+    }
+
+    public Player getUniqueHighestHeartPlayerOnline() {
+        Player best = null;
+        int bestHearts = Integer.MIN_VALUE;
+        boolean tie = false;
+
+        for (Player player : getAliveOnlinePlayers()) {
+            int hearts = getHearts(player);
+
+            if (hearts > bestHearts) {
+                best = player;
+                bestHearts = hearts;
+                tie = false;
+            } else if (hearts == bestHearts) {
+                tie = true;
+            }
+        }
+
+        return tie ? null : best;
+    }
+
+    public boolean isUniqueHighest(Player target) {
+        Player uniqueHighest = getUniqueHighestHeartPlayerOnline();
+        return uniqueHighest != null && uniqueHighest.getUniqueId().equals(target.getUniqueId());
+    }
+
+    public Player getUniqueLowestHeartPlayerOnline(UUID excludeUuid) {
+        Player lowest = null;
+        int lowestHearts = Integer.MAX_VALUE;
+        boolean tie = false;
+
+        for (Player player : getAliveOnlinePlayers()) {
+            if (player.getUniqueId().equals(excludeUuid)) {
+                continue;
+            }
+
+            int hearts = getHearts(player);
+
+            if (hearts < lowestHearts) {
+                lowest = player;
+                lowestHearts = hearts;
+                tie = false;
+            } else if (hearts == lowestHearts) {
+                tie = true;
+            }
+        }
+
+        return tie ? null : lowest;
+    }
+
+    public int getAlivePlayerCount() {
+        int count = 0;
+
+        for (Map.Entry<UUID, Boolean> entry : eliminatedCache.entrySet()) {
+            if (!entry.getValue()) {
+                count++;
+            }
+        }
+
+        return count;
+    }
+
+    public UUID getSingleRemainingPlayerUuid() {
+        UUID winner = null;
+
+        for (Map.Entry<UUID, Boolean> entry : eliminatedCache.entrySet()) {
+            if (entry.getValue()) {
+                continue;
+            }
+
+            if (winner != null) {
+                return null;
+            }
+
+            winner = entry.getKey();
+        }
+
+        return winner;
+    }
+
+    public String getPlayerName(UUID uuid) {
+        Player online = Bukkit.getPlayer(uuid);
+        if (online != null) {
+            return online.getName();
+        }
+
+        OfflinePlayer offline = Bukkit.getOfflinePlayer(uuid);
+        return offline.getName() != null ? offline.getName() : uuid.toString();
     }
 }
