@@ -4,6 +4,8 @@ import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
 
+import java.util.UUID;
+
 public class KillRewardService {
 
     private final JavaPlugin plugin;
@@ -21,57 +23,59 @@ public class KillRewardService {
             return;
         }
 
-        int baseDeathLoss = plugin.getConfig().getInt("hearts.base-death-loss", 1);
-        int baseKillerGain = plugin.getConfig().getInt("hearts.base-killer-gain", 1);
-        int highestDeathBonus = plugin.getConfig().getInt("hearts.highest-death-bonus", 2);
-        int lowestBonus = plugin.getConfig().getInt("hearts.lowest-bonus", 2);
-
-        boolean deadWasUniqueHighest = heartManager.isUniqueHighest(dead);
-        Player uniqueLowest = heartManager.getUniqueLowestHeartPlayerOnline(dead.getUniqueId());
+        int normalTransfer = plugin.getConfig().getInt("hearts.base-death-loss", 1);
+        int boostedTransfer = plugin.getConfig().getInt("hearts.highest-death-bonus", 2);
 
         boolean validKiller = killer != null && !killer.getUniqueId().equals(dead.getUniqueId());
 
         if (validKiller) {
-            heartManager.removeHearts(dead, baseDeathLoss);
+            boolean deadWasUniqueHighest = heartManager.isUniqueHighest(dead);
 
-            if (baseKillerGain > 0) {
-                heartManager.addHearts(killer, baseKillerGain);
+            UUID uniqueLowestUuid = heartManager.getUniqueLowestHeartPlayerUuid();
+            boolean killerWasUniqueLowest = uniqueLowestUuid != null && uniqueLowestUuid.equals(killer.getUniqueId());
+
+            int transferAmount = normalTransfer;
+
+            if (deadWasUniqueHighest && killerWasUniqueLowest) {
+                transferAmount = 3;
+            } else if (deadWasUniqueHighest || killerWasUniqueLowest) {
+                transferAmount = boostedTransfer;
             }
 
-            if (deadWasUniqueHighest && highestDeathBonus > 0) {
-                heartManager.addHearts(killer, highestDeathBonus);
-                killer.sendMessage("§6Du fick +" + highestDeathBonus + " hjärtan eftersom ledaren dog.");
-            }
-
+            heartManager.removeHearts(dead, transferAmount);
+            heartManager.addHearts(killer, transferAmount);
             heartManager.addKill(killer);
 
-            if (uniqueLowest != null && lowestBonus > 0) {
-                heartManager.addHearts(uniqueLowest, lowestBonus);
-                uniqueLowest.sendMessage("§aDu fick +" + lowestBonus + " hjärtan eftersom du låg ensam sist.");
+            if (deadWasUniqueHighest && killerWasUniqueLowest) {
+                killer.sendMessage("§dBoth special heart rules applied. You stole +" + transferAmount + " hearts.");
+            } else if (deadWasUniqueHighest) {
+                killer.sendMessage("§6You killed the unique heart leader and stole +" + transferAmount + " hearts.");
+            } else if (killerWasUniqueLowest) {
+                killer.sendMessage("§aYou were uniquely lowest on hearts and stole +" + transferAmount + " hearts.");
             }
 
             int remainingHearts = heartManager.getHearts(dead);
 
             if (remainingHearts <= 0) {
                 heartManager.eliminate(dead);
-                Bukkit.broadcastMessage("§c" + dead.getName() + " är permanent utslagen.");
+                Bukkit.broadcastMessage("§c" + dead.getName() + " is permanently eliminated.");
                 gameManager.checkWinCondition();
             } else {
-                dead.sendMessage("§cDu har nu " + remainingHearts + " hjärtan kvar.");
+                dead.sendMessage("§cYou now have " + remainingHearts + " hearts remaining.");
             }
 
             return;
         }
 
-        heartManager.addTemporaryPveLoss(dead, baseDeathLoss);
+        heartManager.addTemporaryPveLoss(dead, normalTransfer);
 
         int remainingHearts = heartManager.getHearts(dead);
 
         if (remainingHearts <= 0) {
-            Bukkit.broadcastMessage("§e" + dead.getName() + " är tillfälligt utslagen till nästa PvE-regeneration.");
-            dead.sendMessage("§eDu blev tillfälligt utslagen av PvE. Dina PvE-förlorade hjärtan återställs vid nästa globala regen.");
+            Bukkit.broadcastMessage("§e" + dead.getName() + " is temporarily knocked out until the next PvE regeneration.");
+            dead.sendMessage("§eYou were temporarily knocked out by PvE. Your PvE-lost hearts will return at the next global regeneration.");
         } else {
-            dead.sendMessage("§eDu förlorade " + baseDeathLoss + " temporärt PvE-hjärta/an. Du har nu " + remainingHearts + " hjärtan kvar.");
+            dead.sendMessage("§eYou lost " + normalTransfer + " temporary PvE heart(s). You now have " + remainingHearts + " hearts remaining.");
         }
     }
 }
