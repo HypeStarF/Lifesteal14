@@ -1,5 +1,7 @@
 package me.sdmannen.lifesteal14.game;
 
+import me.sdmannen.lifesteal14.data.GameDataStore;
+import me.sdmannen.lifesteal14.data.PlayerDataStore;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.World;
@@ -8,16 +10,25 @@ import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.UUID;
+
 public class HeartGameCommand implements CommandExecutor {
 
     private final GameManager gameManager;
     private final HeartManager heartManager;
     private final ScoreboardManager scoreboardManager;
+    private final PlayerDataStore playerDataStore;
+    private final GameDataStore gameDataStore;
 
-    public HeartGameCommand(GameManager gameManager, HeartManager heartManager, ScoreboardManager scoreboardManager) {
+    public HeartGameCommand(GameManager gameManager, HeartManager heartManager, ScoreboardManager scoreboardManager,
+                            PlayerDataStore playerDataStore, GameDataStore gameDataStore) {
         this.gameManager = gameManager;
         this.heartManager = heartManager;
         this.scoreboardManager = scoreboardManager;
+        this.playerDataStore = playerDataStore;
+        this.gameDataStore = gameDataStore;
     }
 
     @Override
@@ -48,6 +59,8 @@ public class HeartGameCommand implements CommandExecutor {
             }
 
             case "status" -> sendStatus(sender);
+            case "debugglobal" -> sendDebugGlobal(sender);
+            case "validate" -> runValidation(sender);
 
             case "leaderboard" -> sender.sendMessage(scoreboardManager.buildLeaderboardMessage());
 
@@ -63,14 +76,10 @@ public class HeartGameCommand implements CommandExecutor {
                 }
 
                 Player target = requireOnlinePlayer(sender, args[1]);
-                if (target == null) {
-                    return true;
-                }
+                if (target == null) return true;
 
                 Integer amount = parseInt(sender, args[2], "§cAntalet måste vara ett heltal.");
-                if (amount == null) {
-                    return true;
-                }
+                if (amount == null) return true;
 
                 heartManager.setHearts(target, amount);
                 scoreboardManager.updateAll();
@@ -84,14 +93,10 @@ public class HeartGameCommand implements CommandExecutor {
                 }
 
                 Player target = requireOnlinePlayer(sender, args[1]);
-                if (target == null) {
-                    return true;
-                }
+                if (target == null) return true;
 
                 Integer amount = parseInt(sender, args[2], "§cAntalet måste vara ett heltal.");
-                if (amount == null) {
-                    return true;
-                }
+                if (amount == null) return true;
 
                 heartManager.setTemporaryPveLoss(target, amount);
                 scoreboardManager.updateAll();
@@ -105,9 +110,7 @@ public class HeartGameCommand implements CommandExecutor {
                 }
 
                 Player target = requireOnlinePlayer(sender, args[1]);
-                if (target == null) {
-                    return true;
-                }
+                if (target == null) return true;
 
                 sendPlayerHearts(sender, target);
             }
@@ -119,9 +122,7 @@ public class HeartGameCommand implements CommandExecutor {
                 }
 
                 Player target = requireOnlinePlayer(sender, args[1]);
-                if (target == null) {
-                    return true;
-                }
+                if (target == null) return true;
 
                 sendPlayerDebug(sender, target);
             }
@@ -133,9 +134,7 @@ public class HeartGameCommand implements CommandExecutor {
                 }
 
                 Player target = requireOnlinePlayer(sender, args[1]);
-                if (target == null) {
-                    return true;
-                }
+                if (target == null) return true;
 
                 heartManager.syncPlayer(target);
                 scoreboardManager.updateAll();
@@ -149,9 +148,7 @@ public class HeartGameCommand implements CommandExecutor {
                 }
 
                 Player target = requireOnlinePlayer(sender, args[1]);
-                if (target == null) {
-                    return true;
-                }
+                if (target == null) return true;
 
                 heartManager.reloadPlayerFromDisk(target);
                 scoreboardManager.updateAll();
@@ -164,10 +161,43 @@ public class HeartGameCommand implements CommandExecutor {
                 sender.sendMessage("§aSparade all spelar-data och game state.");
             }
 
-            case "restorepve" -> {
-                int restored = heartManager.restoreAllTemporaryPveHearts();
+            case "restorepve", "forcepveregen" -> {
+                int restored = gameManager.forcePveRegen();
                 scoreboardManager.updateAll();
                 sender.sendMessage("§aÅterställde PvE-hjärtan. Påverkade spelare: §f" + restored);
+            }
+
+            case "forcereveal" -> {
+                gameManager.forceReveal();
+                sender.sendMessage("§aTvingade reveal.");
+            }
+
+            case "forcegraceend" -> {
+                if (gameManager.getGameState() != GameState.GRACE) {
+                    sender.sendMessage("§cSpelet är inte i grace.");
+                    return true;
+                }
+
+                gameManager.setTimer("grace", 5);
+                sender.sendMessage("§aGrace sattes till 5.");
+            }
+
+            case "settimer" -> {
+                if (args.length < 3) {
+                    sender.sendMessage("§cAnvänd: /heartgame settimer <grace|reveal|revealinterval|nether|gameend> <seconds>");
+                    return true;
+                }
+
+                Integer seconds = parseInt(sender, args[2], "§cSeconds måste vara ett heltal.");
+                if (seconds == null) return true;
+
+                boolean ok = gameManager.setTimer(args[1], seconds);
+                if (!ok) {
+                    sender.sendMessage("§cOgiltig timer. Använd grace, reveal, revealinterval, nether eller gameend.");
+                    return true;
+                }
+
+                sender.sendMessage("§aSatte " + args[1] + " till " + seconds + " sekunder.");
             }
 
             case "eliminate" -> {
@@ -177,9 +207,7 @@ public class HeartGameCommand implements CommandExecutor {
                 }
 
                 Player target = requireOnlinePlayer(sender, args[1]);
-                if (target == null) {
-                    return true;
-                }
+                if (target == null) return true;
 
                 heartManager.eliminate(target);
                 scoreboardManager.updateAll();
@@ -193,14 +221,10 @@ public class HeartGameCommand implements CommandExecutor {
                 }
 
                 Player target = requireOnlinePlayer(sender, args[1]);
-                if (target == null) {
-                    return true;
-                }
+                if (target == null) return true;
 
                 Integer hearts = parseInt(sender, args[2], "§cHjärtan måste vara ett heltal.");
-                if (hearts == null) {
-                    return true;
-                }
+                if (hearts == null) return true;
 
                 heartManager.revivePlayer(target, hearts);
                 scoreboardManager.updateAll();
@@ -214,14 +238,10 @@ public class HeartGameCommand implements CommandExecutor {
                 }
 
                 Player target = requireOnlinePlayer(sender, args[1]);
-                if (target == null) {
-                    return true;
-                }
+                if (target == null) return true;
 
                 Integer amount = parseInt(sender, args[2], "§cAntalet måste vara ett heltal.");
-                if (amount == null) {
-                    return true;
-                }
+                if (amount == null) return true;
 
                 heartManager.addKills(target, amount);
                 scoreboardManager.updateAll();
@@ -235,9 +255,7 @@ public class HeartGameCommand implements CommandExecutor {
                 }
 
                 Player target = requireOnlinePlayer(sender, args[1]);
-                if (target == null) {
-                    return true;
-                }
+                if (target == null) return true;
 
                 gameManager.getLobbyCageManager().teleportToCage(target);
                 sender.sendMessage("§aTeleportade " + target.getName() + " till glassburen.");
@@ -255,6 +273,8 @@ public class HeartGameCommand implements CommandExecutor {
         sender.sendMessage("§e/heartgame start");
         sender.sendMessage("§e/heartgame stop");
         sender.sendMessage("§e/heartgame status");
+        sender.sendMessage("§e/heartgame debugglobal");
+        sender.sendMessage("§e/heartgame validate");
         sender.sendMessage("§e/heartgame leaderboard");
         sender.sendMessage("§e/heartgame sidebar");
         sender.sendMessage("§e/heartgame hearts <player>");
@@ -265,6 +285,10 @@ public class HeartGameCommand implements CommandExecutor {
         sender.sendMessage("§e/heartgame reload <player>");
         sender.sendMessage("§e/heartgame saveall");
         sender.sendMessage("§e/heartgame restorepve");
+        sender.sendMessage("§e/heartgame forcepveregen");
+        sender.sendMessage("§e/heartgame forcereveal");
+        sender.sendMessage("§e/heartgame forcegraceend");
+        sender.sendMessage("§e/heartgame settimer <timer> <seconds>");
         sender.sendMessage("§e/heartgame eliminate <player>");
         sender.sendMessage("§e/heartgame revive <player> <hearts>");
         sender.sendMessage("§e/heartgame killadd <player> <amount>");
@@ -307,6 +331,90 @@ public class HeartGameCommand implements CommandExecutor {
                 + "X[" + cage.getMinX() + ".." + cage.getMaxX() + "] "
                 + "Y[" + cage.getMinY() + ".." + cage.getMaxY() + "] "
                 + "Z[" + cage.getMinZ() + ".." + cage.getMaxZ() + "]");
+    }
+
+    private void sendDebugGlobal(CommandSender sender) {
+        gameDataStore.reload();
+
+        sender.sendMessage("§6§lDebug global");
+        sender.sendMessage("§eLoaded state: §f" + gameManager.getGameState());
+        sender.sendMessage("§eSaved state: §f" + gameDataStore.getGameState());
+        sender.sendMessage("§eSaved winner: §f" + gameDataStore.getWinnerName());
+        sender.sendMessage("§eLoaded winner: §f" + gameManager.getWinnerName());
+        sender.sendMessage("§eSaved nether open: §f" + gameDataStore.isNetherOpen());
+        sender.sendMessage("§eLoaded nether open: §f" + gameManager.isNetherOpen());
+        sender.sendMessage("§eSaved grace: §f" + gameDataStore.getGraceSecondsRemaining());
+        sender.sendMessage("§eLoaded grace: §f" + gameManager.getGraceSecondsRemaining());
+        sender.sendMessage("§eSaved reveal: §f" + gameDataStore.getSecondsUntilReveal());
+        sender.sendMessage("§eLoaded reveal: §f" + gameManager.getSecondsUntilReveal());
+        sender.sendMessage("§eSaved reveal interval: §f" + gameDataStore.getRevealIntervalSeconds());
+        sender.sendMessage("§eLoaded reveal interval: §f" + gameManager.getRevealIntervalSeconds());
+        sender.sendMessage("§eSaved nether timer: §f" + gameDataStore.getNetherSecondsRemaining());
+        sender.sendMessage("§eLoaded nether timer: §f" + gameManager.getNetherSecondsRemaining());
+        sender.sendMessage("§eSaved game end: §f" + gameDataStore.getGameEndSecondsRemaining());
+        sender.sendMessage("§eLoaded game end: §f" + gameManager.getGameEndSecondsRemaining());
+        sender.sendMessage("§eSaved cage created: §f" + gameDataStore.isCageCreated());
+        sender.sendMessage("§eSaved cage world: §f" + gameDataStore.getCageWorld());
+        sender.sendMessage("§eSaved cage center: §f" + formatLocation(gameDataStore.getCageCenter()));
+        sender.sendMessage("§eNext PvE regen: §f" + gameManager.getNextPveRegenDisplay());
+    }
+
+    private void runValidation(CommandSender sender) {
+        List<String> issues = new ArrayList<>();
+
+        if (gameManager.getGraceSecondsRemaining() < 0) {
+            issues.add("Grace timer är negativ.");
+        }
+        if (gameManager.getSecondsUntilReveal() < 0) {
+            issues.add("Reveal timer är negativ.");
+        }
+        if (gameManager.getRevealIntervalSeconds() < 0) {
+            issues.add("Reveal interval är negativ.");
+        }
+        if (gameManager.getNetherSecondsRemaining() < 0) {
+            issues.add("Nether timer är negativ.");
+        }
+        if (gameManager.getGameEndSecondsRemaining() < 0) {
+            issues.add("Game end timer är negativ.");
+        }
+
+        if (gameManager.getLobbyCageManager().isCreated()) {
+            if (gameManager.getLobbyCageManager().getWorld() == null) {
+                issues.add("Cage är created men world är null.");
+            }
+            if (gameManager.getLobbyCageManager().getCenter() == null) {
+                issues.add("Cage är created men center är null.");
+            }
+        }
+
+        for (UUID uuid : heartManager.getAllKnownPlayerUuids()) {
+            int permanent = heartManager.getPermanentHearts(uuid);
+            int temp = heartManager.getTemporaryPveLoss(uuid);
+            boolean eliminated = heartManager.isPermanentlyEliminated(uuid);
+
+            if (permanent < 0) {
+                issues.add("Negativa permanenta hjärtan: " + heartManager.getPlayerName(uuid));
+            }
+            if (temp < 0) {
+                issues.add("Negativ PvE-loss: " + heartManager.getPlayerName(uuid));
+            }
+            if (temp > permanent) {
+                issues.add("PvE-loss större än permanenta hjärtan: " + heartManager.getPlayerName(uuid));
+            }
+            if (eliminated && permanent > 0) {
+                issues.add("Permanent eliminerad spelare har fortfarande permanenta hjärtan > 0: " + heartManager.getPlayerName(uuid));
+            }
+        }
+
+        if (issues.isEmpty()) {
+            sender.sendMessage("§aValidation OK. Inga problem hittades.");
+            return;
+        }
+
+        sender.sendMessage("§cValidation hittade " + issues.size() + " problem:");
+        for (String issue : issues) {
+            sender.sendMessage("§7- §f" + issue);
+        }
     }
 
     private void sendPlayerHearts(CommandSender sender, Player target) {

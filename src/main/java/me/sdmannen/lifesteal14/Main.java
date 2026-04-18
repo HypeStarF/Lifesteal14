@@ -2,6 +2,7 @@ package me.sdmannen.lifesteal14;
 
 import me.sdmannen.lifesteal14.data.GameDataStore;
 import me.sdmannen.lifesteal14.data.PlayerDataStore;
+import me.sdmannen.lifesteal14.game.CombatTagService;
 import me.sdmannen.lifesteal14.game.GameManager;
 import me.sdmannen.lifesteal14.game.HeartGameCommand;
 import me.sdmannen.lifesteal14.game.HeartGameTabCompleter;
@@ -26,6 +27,7 @@ public final class Main extends JavaPlugin {
     private PlayerDataStore playerDataStore;
     private GameDataStore gameDataStore;
     private ScoreboardManager scoreboardManager;
+    private CombatTagService combatTagService;
 
     @Override
     public void onEnable() {
@@ -36,6 +38,7 @@ public final class Main extends JavaPlugin {
         this.playerDataStore = new PlayerDataStore(this);
         this.gameDataStore = new GameDataStore(this);
         this.heartManager = new HeartManager(this, playerDataStore);
+        this.combatTagService = new CombatTagService(this);
         this.gameManager = new GameManager(this, heartManager, gameDataStore);
         this.killRewardService = new KillRewardService(this, heartManager, gameManager);
         this.scoreboardManager = new ScoreboardManager(this, heartManager, gameManager);
@@ -50,6 +53,13 @@ public final class Main extends JavaPlugin {
         scoreboardManager.updateAll();
 
         getLogger().info("Lifesteal14 enabled.");
+        getLogger().info("Loaded game state: " + gameManager.getGameState());
+        getLogger().info("Grace remaining: " + gameManager.getGraceSecondsRemaining());
+        getLogger().info("Reveal remaining: " + gameManager.getSecondsUntilReveal());
+        getLogger().info("Nether remaining: " + gameManager.getNetherSecondsRemaining());
+        getLogger().info("Game end remaining: " + gameManager.getGameEndSecondsRemaining());
+        getLogger().info("Nether open: " + gameManager.isNetherOpen());
+        getLogger().info("Known players loaded: " + heartManager.getAllKnownPlayerUuids().size());
     }
 
     @Override
@@ -71,7 +81,13 @@ public final class Main extends JavaPlugin {
 
     private void registerCommands() {
         if (getCommand("heartgame") != null) {
-            HeartGameCommand commandExecutor = new HeartGameCommand(gameManager, heartManager, scoreboardManager);
+            HeartGameCommand commandExecutor = new HeartGameCommand(
+                    gameManager,
+                    heartManager,
+                    scoreboardManager,
+                    playerDataStore,
+                    gameDataStore
+            );
             getCommand("heartgame").setExecutor(commandExecutor);
             getCommand("heartgame").setTabCompleter(new HeartGameTabCompleter());
         }
@@ -81,8 +97,8 @@ public final class Main extends JavaPlugin {
         getServer().getPluginManager().registerEvents(new JoinListener(heartManager, gameManager), this);
         getServer().getPluginManager().registerEvents(new QuitListener(heartManager), this);
         getServer().getPluginManager().registerEvents(new PlayerRespawnListener(this, heartManager), this);
-        getServer().getPluginManager().registerEvents(new PlayerDeathListener(gameManager, killRewardService), this);
-        getServer().getPluginManager().registerEvents(new PvpListener(gameManager), this);
+        getServer().getPluginManager().registerEvents(new PlayerDeathListener(gameManager, killRewardService, combatTagService), this);
+        getServer().getPluginManager().registerEvents(new PvpListener(gameManager, combatTagService), this);
         getServer().getPluginManager().registerEvents(new NetherListener(gameManager), this);
     }
 
@@ -112,5 +128,9 @@ public final class Main extends JavaPlugin {
 
     public ScoreboardManager getScoreboardManager() {
         return scoreboardManager;
+    }
+
+    public CombatTagService getCombatTagService() {
+        return combatTagService;
     }
 }

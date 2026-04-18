@@ -10,3 +10,19 @@ hearts:
   highest-death-bonus: 2
   lowest-bonus: 2
 
+combat:
+  assist-window-seconds: 15
+
+debug:
+  autosave-seconds: 5
+
+messages:
+  broadcast-pve-regen: true
+  broadcast-reveal: true
+  broadcast-nether-open: true
+  broadcast-game-start: true
+  broadcast-game-stop: true
+  broadcast-grace-end: true
+
+anti-farm:
+  cooldown-minutes: 60

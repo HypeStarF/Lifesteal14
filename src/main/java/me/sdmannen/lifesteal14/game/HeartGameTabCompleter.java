@@ -18,6 +18,8 @@ public class HeartGameTabCompleter implements TabCompleter {
             "start",
             "stop",
             "status",
+            "debugglobal",
+            "validate",
             "leaderboard",
             "sidebar",
             "hearts",
@@ -28,6 +30,10 @@ public class HeartGameTabCompleter implements TabCompleter {
             "reload",
             "saveall",
             "restorepve",
+            "forcepveregen",
+            "forcereveal",
+            "forcegraceend",
+            "settimer",
             "eliminate",
             "revive",
             "killadd",
@@ -40,6 +46,10 @@ public class HeartGameTabCompleter implements TabCompleter {
 
     private static final List<String> KILL_VALUES = List.of(
             "0", "1", "2", "3", "5", "10"
+    );
+
+    private static final List<String> TIMER_VALUES = List.of(
+            "grace", "reveal", "revealinterval", "nether", "gameend"
     );
 
     @Override
@@ -58,6 +68,7 @@ public class HeartGameTabCompleter implements TabCompleter {
             return switch (sub) {
                 case "hearts", "debug", "sethearts", "settemp", "sync", "reload",
                      "eliminate", "revive", "killadd", "tpcage" -> onlinePlayerNames(args[1]);
+                case "settimer" -> filterByPrefix(TIMER_VALUES, args[1]);
                 default -> Collections.emptyList();
             };
         }
@@ -67,6 +78,7 @@ public class HeartGameTabCompleter implements TabCompleter {
                 case "sethearts", "revive" -> filterByPrefix(HEART_VALUES, args[2]);
                 case "settemp" -> filterByPrefix(List.of("0", "1", "2", "3", "4", "5"), args[2]);
                 case "killadd" -> filterByPrefix(KILL_VALUES, args[2]);
+                case "settimer" -> filterByPrefix(List.of("0", "1", "10", "60", "300", "600", "3600", "86400"), args[2]);
                 default -> Collections.emptyList();
             };
         }

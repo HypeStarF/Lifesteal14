@@ -12,9 +12,11 @@ import org.bukkit.event.entity.EntityDamageByEntityEvent;
 public class PvpListener implements Listener {
 
     private final GameManager gameManager;
+    private final CombatTagService combatTagService;
 
-    public PvpListener(GameManager gameManager) {
+    public PvpListener(GameManager gameManager, CombatTagService combatTagService) {
         this.gameManager = gameManager;
+        this.combatTagService = combatTagService;
     }
 
     @EventHandler
@@ -34,7 +36,10 @@ public class PvpListener implements Listener {
             if (!attacker.getUniqueId().equals(victim.getUniqueId())) {
                 attacker.sendMessage("§cPvP är avstängt under grace period.");
             }
+            return;
         }
+
+        combatTagService.tag(victim, attacker);
     }
 
     private Player getResponsiblePlayer(Entity damager) {

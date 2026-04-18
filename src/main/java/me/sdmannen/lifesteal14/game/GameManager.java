@@ -239,7 +239,9 @@ public class GameManager {
             player.setInvulnerable(false);
         }
 
-        Bukkit.broadcastMessage("§aSpelet har startat. Grace period är aktiv.");
+        if (plugin.getConfig().getBoolean("messages.broadcast-game-start", true)) {
+            Bukkit.broadcastMessage("§aSpelet har startat. Grace period är aktiv.");
+        }
 
         startGracePeriodTimer();
         startNetherTimer();
@@ -255,7 +257,11 @@ public class GameManager {
         removeBossBar();
         gameState = GameState.ENDED;
         freezeAllPlayers();
-        Bukkit.broadcastMessage("§cSpelet har avslutats.");
+
+        if (plugin.getConfig().getBoolean("messages.broadcast-game-stop", true)) {
+            Bukkit.broadcastMessage("§cSpelet har avslutats.");
+        }
+
         saveState();
     }
 
@@ -292,6 +298,63 @@ public class GameManager {
         gameDataStore.save();
     }
 
+    public void forceReveal() {
+        if (gameState != GameState.RUNNING) {
+            return;
+        }
+
+        doHourlyReveal();
+        secondsUntilReveal = revealIntervalSeconds;
+        updateTimerBossBar();
+        saveState();
+    }
+
+    public int forcePveRegen() {
+        int restored = heartManager.restoreAllTemporaryPveHearts();
+        saveState();
+        return restored;
+    }
+
+    public boolean setTimer(String timerName, long valueSeconds) {
+        long clamped = Math.max(0L, valueSeconds);
+
+        switch (timerName.toLowerCase()) {
+            case "grace" -> graceSecondsRemaining = (int) Math.min(Integer.MAX_VALUE, clamped);
+            case "reveal" -> secondsUntilReveal = (int) Math.min(Integer.MAX_VALUE, clamped);
+            case "revealinterval" -> revealIntervalSeconds = (int) Math.min(Integer.MAX_VALUE, clamped);
+            case "nether" -> netherSecondsRemaining = clamped;
+            case "gameend" -> gameEndSecondsRemaining = clamped;
+            default -> {
+                return false;
+            }
+        }
+
+        restartTimersFromCurrentState();
+        updateTimerBossBar();
+        saveState();
+        return true;
+    }
+
+    private void restartTimersFromCurrentState() {
+        cancelScheduledTasks();
+
+        if (gameState == GameState.GRACE && graceSecondsRemaining > 0) {
+            startGracePeriodTimer();
+        }
+
+        if (isActive() && !netherOpen && netherSecondsRemaining > 0) {
+            startNetherTimer();
+        }
+
+        if (isActive() && gameEndSecondsRemaining > 0) {
+            startGameEndTimer();
+        }
+
+        if (isActive()) {
+            startMainTimerLoop();
+        }
+    }
+
     private void startGracePeriodTimer() {
         long ticks = Math.max(1L, graceSecondsRemaining) * 20L;
 
@@ -302,7 +365,11 @@ public class GameManager {
                 graceSecondsRemaining = 0;
                 gameState = GameState.RUNNING;
                 secondsUntilReveal = revealIntervalSeconds;
-                Bukkit.broadcastMessage("§cGrace period är slut. PvP är nu aktiverat.");
+
+                if (plugin.getConfig().getBoolean("messages.broadcast-grace-end", true)) {
+                    Bukkit.broadcastMessage("§cGrace period är slut. PvP är nu aktiverat.");
+                }
+
                 saveState();
             }
         }, ticks);
@@ -317,7 +384,11 @@ public class GameManager {
             if (isActive()) {
                 netherSecondsRemaining = 0L;
                 netherOpen = true;
-                Bukkit.broadcastMessage("§6Nether är nu öppet.");
+
+                if (plugin.getConfig().getBoolean("messages.broadcast-nether-open", true)) {
+                    Bukkit.broadcastMessage("§6Nether är nu öppet.");
+                }
+
                 saveState();
             }
         }, ticks);
@@ -362,10 +433,12 @@ public class GameManager {
 
                 int restoredPlayers = heartManager.restoreAllTemporaryPveHearts();
 
-                if (restoredPlayers > 0) {
-                    Bukkit.broadcastMessage("§aGlobal PvE-regeneration aktiverades. Alla temporärt förlorade PvE-hjärtan har återställts.");
-                } else {
-                    Bukkit.broadcastMessage("§aGlobal PvE-regeneration aktiverades. Inga PvE-hjärtan behövde återställas.");
+                if (plugin.getConfig().getBoolean("messages.broadcast-pve-regen", true)) {
+                    if (restoredPlayers > 0) {
+                        Bukkit.broadcastMessage("§aGlobal PvE-regeneration aktiverades. Alla temporärt förlorade PvE-hjärtan har återställts.");
+                    } else {
+                        Bukkit.broadcastMessage("§aGlobal PvE-regeneration aktiverades. Inga PvE-hjärtan behövde återställas.");
+                    }
                 }
             }
 
@@ -381,7 +454,8 @@ public class GameManager {
             updateTimerBossBar();
 
             autosaveTickCounter++;
-            if (autosaveTickCounter >= 5) {
+            int autosaveSeconds = Math.max(1, plugin.getConfig().getInt("debug.autosave-seconds", 5));
+            if (autosaveTickCounter >= autosaveSeconds) {
                 autosaveTickCounter = 0;
                 saveState();
             }
@@ -486,6 +560,10 @@ public class GameManager {
         Player leader = getOnlineHighestHeartLeader();
 
         if (leader == null) {
+            return;
+        }
+
+        if (!plugin.getConfig().getBoolean("messages.broadcast-reveal", true)) {
             return;
         }
 
@@ -734,5 +812,9 @@ public class GameManager {
 
     public long getGameEndSecondsRemaining() {
         return gameEndSecondsRemaining;
+    }
+
+    public String getWinnerName() {
+        return winnerName;
     }
 }
