@@ -149,7 +149,7 @@ public class ScoreboardManager {
         List<UUID> winners = new ArrayList<>();
 
         for (UUID uuid : all) {
-            if (heartManager.isPermanentlyEliminated(uuid)) {
+            if (!heartManager.isAlive(uuid)) {
                 continue;
             }
 
@@ -177,7 +177,7 @@ public class ScoreboardManager {
         List<UUID> losers = new ArrayList<>();
 
         for (UUID uuid : all) {
-            if (heartManager.isPermanentlyEliminated(uuid)) {
+            if (!heartManager.isAlive(uuid)) {
                 continue;
             }
 
@@ -205,7 +205,7 @@ public class ScoreboardManager {
         List<UUID> winners = new ArrayList<>();
 
         for (UUID uuid : all) {
-            if (heartManager.isPermanentlyEliminated(uuid)) {
+            if (!heartManager.isAlive(uuid)) {
                 continue;
             }
 

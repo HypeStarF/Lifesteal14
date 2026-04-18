@@ -233,6 +233,14 @@ public class HeartManager {
         return isPermanentlyEliminated(uuid) || isTemporarilyKnockedOut(uuid);
     }
 
+    public boolean isAlive(Player player) {
+        return isAlive(player.getUniqueId());
+    }
+
+    public boolean isAlive(UUID uuid) {
+        return !isEliminated(uuid);
+    }
+
     public void eliminate(Player player) {
         UUID uuid = player.getUniqueId();
 
@@ -351,7 +359,7 @@ public class HeartManager {
         List<Player> players = new ArrayList<>();
 
         for (Player player : Bukkit.getOnlinePlayers()) {
-            if (!isPermanentlyEliminated(player)) {
+            if (isAlive(player)) {
                 players.add(player);
             }
         }
@@ -363,7 +371,7 @@ public class HeartManager {
         List<UUID> uuids = new ArrayList<>();
 
         for (UUID uuid : getAllKnownPlayerUuids()) {
-            if (!isPermanentlyEliminated(uuid)) {
+            if (isAlive(uuid)) {
                 uuids.add(uuid);
             }
         }
@@ -424,7 +432,7 @@ public class HeartManager {
         int count = 0;
 
         for (UUID uuid : getAllKnownPlayerUuids()) {
-            if (!isPermanentlyEliminated(uuid)) {
+            if (isAlive(uuid)) {
                 count++;
             }
         }
@@ -436,7 +444,7 @@ public class HeartManager {
         UUID winner = null;
 
         for (UUID uuid : getAllKnownPlayerUuids()) {
-            if (isPermanentlyEliminated(uuid)) {
+            if (!isAlive(uuid)) {
                 continue;
             }
 
