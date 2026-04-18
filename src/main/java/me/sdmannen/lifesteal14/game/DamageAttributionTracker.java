@@ -6,6 +6,7 @@ import org.bukkit.entity.Projectile;
 import org.bukkit.entity.TNTPrimed;
 import org.bukkit.entity.Tameable;
 import org.bukkit.event.EventHandler;
+import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
@@ -19,10 +20,19 @@ public class DamageAttributionTracker implements Listener {
 
     private static final long ATTRIBUTION_WINDOW_MILLIS = 15_000L;
 
+    private final GameManager gameManager;
     private final Map<UUID, DamageRecord> lastDamageMap = new HashMap<>();
 
-    @EventHandler
+    public DamageAttributionTracker(GameManager gameManager) {
+        this.gameManager = gameManager;
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onPlayerDamagedByEntity(EntityDamageByEntityEvent event) {
+        if (!gameManager.isRunning()) {
+            return;
+        }
+
         if (!(event.getEntity() instanceof Player victim)) {
             return;
         }
@@ -37,7 +47,11 @@ public class DamageAttributionTracker implements Listener {
         }
 
         long now = System.currentTimeMillis();
-        lastDamageMap.put(victim.getUniqueId(), new DamageRecord(attacker.getUniqueId(), now + ATTRIBUTION_WINDOW_MILLIS));
+        lastDamageMap.put(
+                victim.getUniqueId(),
+                new DamageRecord(attacker.getUniqueId(), now + ATTRIBUTION_WINDOW_MILLIS)
+        );
+
         cleanupExpired(now);
     }
 

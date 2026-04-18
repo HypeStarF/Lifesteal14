@@ -31,7 +31,7 @@ public final class Main extends JavaPlugin {
         this.gameManager = new GameManager(this, heartManager, gameDataStore);
         this.killRewardService = new KillRewardService(this, heartManager, gameManager);
         this.scoreboardManager = new ScoreboardManager(this, heartManager, gameManager);
-        this.damageAttributionTracker = new DamageAttributionTracker();
+        this.damageAttributionTracker = new DamageAttributionTracker(gameManager);
 
         heartManager.loadAllKnownPlayersFromStore();
         gameManager.loadPersistentState();
