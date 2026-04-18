@@ -1,6 +1,5 @@
 package me.sdmannen.lifesteal14.game;
 
-
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.World;
@@ -77,6 +76,18 @@ public class LobbyCageManager {
         created = false;
     }
 
+    public void restoreState(World world, int minX, int maxX, int minY, int maxY, int minZ, int maxZ, Location center, boolean created) {
+        this.world = world;
+        this.minX = minX;
+        this.maxX = maxX;
+        this.minY = minY;
+        this.maxY = maxY;
+        this.minZ = minZ;
+        this.maxZ = maxZ;
+        this.center = center;
+        this.created = created;
+    }
+
     public void teleportToCage(org.bukkit.entity.Player player) {
         if (center != null) {
             player.teleport(center);
@@ -85,5 +96,37 @@ public class LobbyCageManager {
 
     public boolean isCreated() {
         return created;
+    }
+
+    public World getWorld() {
+        return world;
+    }
+
+    public int getMinX() {
+        return minX;
+    }
+
+    public int getMaxX() {
+        return maxX;
+    }
+
+    public int getMinY() {
+        return minY;
+    }
+
+    public int getMaxY() {
+        return maxY;
+    }
+
+    public int getMinZ() {
+        return minZ;
+    }
+
+    public int getMaxZ() {
+        return maxZ;
+    }
+
+    public Location getCenter() {
+        return center;
     }
 }

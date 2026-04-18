@@ -1,5 +1,6 @@
 package me.sdmannen.lifesteal14.game;
 
+import me.sdmannen.lifesteal14.data.GameDataStore;
 import org.bukkit.Bukkit;
 import org.bukkit.GameMode;
 import org.bukkit.World;
@@ -21,6 +22,7 @@ public class GameManager {
     private final JavaPlugin plugin;
     private final HeartManager heartManager;
     private final LobbyCageManager lobbyCageManager;
+    private final GameDataStore gameDataStore;
 
     private GameState gameState;
     private boolean netherOpen;
@@ -39,13 +41,98 @@ public class GameManager {
     private long netherSecondsRemaining;
     private long gameEndSecondsRemaining;
 
-    public GameManager(JavaPlugin plugin, HeartManager heartManager) {
+    public GameManager(JavaPlugin plugin, HeartManager heartManager, GameDataStore gameDataStore) {
         this.plugin = plugin;
         this.heartManager = heartManager;
+        this.gameDataStore = gameDataStore;
         this.lobbyCageManager = new LobbyCageManager(plugin);
         this.gameState = GameState.WAITING;
         this.netherOpen = false;
         this.winnerName = null;
+    }
+
+    public void loadPersistentState() {
+        try {
+            this.gameState = GameState.valueOf(gameDataStore.getGameState());
+        } catch (IllegalArgumentException ex) {
+            this.gameState = GameState.WAITING;
+        }
+
+        this.netherOpen = gameDataStore.isNetherOpen();
+        this.winnerName = gameDataStore.getWinnerName();
+        this.secondsUntilReveal = gameDataStore.getSecondsUntilReveal();
+        this.revealIntervalSeconds = gameDataStore.getRevealIntervalSeconds();
+        this.graceSecondsRemaining = gameDataStore.getGraceSecondsRemaining();
+        this.netherSecondsRemaining = gameDataStore.getNetherSecondsRemaining();
+        this.gameEndSecondsRemaining = gameDataStore.getGameEndSecondsRemaining();
+
+        String cageWorldName = gameDataStore.getCageWorld();
+        if (cageWorldName != null) {
+            World world = Bukkit.getWorld(cageWorldName);
+            if (world != null) {
+                lobbyCageManager.restoreState(
+                        world,
+                        gameDataStore.getCageMinX(),
+                        gameDataStore.getCageMaxX(),
+                        gameDataStore.getCageMinY(),
+                        gameDataStore.getCageMaxY(),
+                        gameDataStore.getCageMinZ(),
+                        gameDataStore.getCageMaxZ(),
+                        gameDataStore.getCageCenter(),
+                        gameDataStore.isCageCreated()
+                );
+            }
+        }
+    }
+
+    public void restoreAfterRestart() {
+        switch (gameState) {
+            case WAITING -> {
+                if (!lobbyCageManager.isCreated()) {
+                    lobbyCageManager.createCage();
+                    saveState();
+                }
+
+                for (Player player : Bukkit.getOnlinePlayers()) {
+                    prepareWaitingPlayer(player);
+                }
+            }
+            case GRACE, RUNNING -> {
+                for (Player player : Bukkit.getOnlinePlayers()) {
+                    unfreezePlayer(player);
+                    heartManager.loadPlayer(player);
+                    if (!heartManager.isEliminated(player)) {
+                        player.setInvulnerable(false);
+                    }
+                }
+
+                createTimerBossBar();
+                updateTimerBossBar();
+
+                if (gameState == GameState.GRACE && graceSecondsRemaining > 0) {
+                    startGracePeriodTimer();
+                }
+
+                if (!netherOpen && netherSecondsRemaining > 0) {
+                    startNetherTimer();
+                }
+
+                if (gameEndSecondsRemaining > 0) {
+                    startGameEndTimer();
+                }
+
+                startMainTimerLoop();
+            }
+            case ENDED -> {
+                for (Player player : Bukkit.getOnlinePlayers()) {
+                    heartManager.loadPlayer(player);
+                    freezePlayer(player);
+                    if (winnerName != null) {
+                        player.sendTitle("§6§lVINNARE", "§f" + winnerName, 10, 80, 20);
+                    }
+                }
+            }
+        }
     }
 
     public void initializeLobby() {
@@ -56,18 +143,22 @@ public class GameManager {
         for (Player player : Bukkit.getOnlinePlayers()) {
             prepareWaitingPlayer(player);
         }
+
+        saveState();
     }
 
     public void handleJoin(Player player) {
         if (gameState == GameState.WAITING) {
             if (!lobbyCageManager.isCreated()) {
                 lobbyCageManager.createCage();
+                saveState();
             }
             prepareWaitingPlayer(player);
             return;
         }
 
         if (gameState == GameState.ENDED) {
+            heartManager.loadPlayer(player);
             freezePlayer(player);
             if (winnerName != null) {
                 player.sendTitle("§6§lVINNARE", "§f" + winnerName, 10, 80, 20);
@@ -76,6 +167,10 @@ public class GameManager {
         }
 
         heartManager.loadPlayer(player);
+        unfreezePlayer(player);
+        if (!heartManager.isEliminated(player)) {
+            player.setInvulnerable(false);
+        }
     }
 
     private void prepareWaitingPlayer(Player player) {
@@ -122,6 +217,7 @@ public class GameManager {
         startMainTimerLoop();
         createTimerBossBar();
         updateTimerBossBar();
+        saveState();
     }
 
     public void stopGame() {
@@ -130,11 +226,40 @@ public class GameManager {
         gameState = GameState.ENDED;
         freezeAllPlayers();
         Bukkit.broadcastMessage("§cSpelet har avslutats.");
+        saveState();
     }
 
     public void shutdown() {
         cancelScheduledTasks();
         removeBossBar();
+        saveState();
+    }
+
+    public void saveState() {
+        gameDataStore.setGameState(gameState.name());
+        gameDataStore.setNetherOpen(netherOpen);
+        gameDataStore.setWinnerName(winnerName);
+        gameDataStore.setSecondsUntilReveal(secondsUntilReveal);
+        gameDataStore.setRevealIntervalSeconds(revealIntervalSeconds);
+        gameDataStore.setGraceSecondsRemaining(graceSecondsRemaining);
+        gameDataStore.setNetherSecondsRemaining(netherSecondsRemaining);
+        gameDataStore.setGameEndSecondsRemaining(gameEndSecondsRemaining);
+
+        if (lobbyCageManager.getWorld() != null) {
+            gameDataStore.setCageBounds(
+                    lobbyCageManager.getWorld().getName(),
+                    lobbyCageManager.getMinX(),
+                    lobbyCageManager.getMaxX(),
+                    lobbyCageManager.getMinY(),
+                    lobbyCageManager.getMaxY(),
+                    lobbyCageManager.getMinZ(),
+                    lobbyCageManager.getMaxZ()
+            );
+        }
+
+        gameDataStore.setCageCenter(lobbyCageManager.getCenter());
+        gameDataStore.setCageCreated(lobbyCageManager.isCreated());
+        gameDataStore.save();
     }
 
     private void startGracePeriodTimer() {
@@ -148,6 +273,7 @@ public class GameManager {
                 gameState = GameState.RUNNING;
                 secondsUntilReveal = revealIntervalSeconds;
                 Bukkit.broadcastMessage("§cGrace period är slut. PvP är nu aktiverat.");
+                saveState();
             }
         }, ticks);
     }
@@ -162,12 +288,13 @@ public class GameManager {
                 netherSecondsRemaining = 0L;
                 netherOpen = true;
                 Bukkit.broadcastMessage("§6Nether är nu öppet.");
+                saveState();
             }
         }, ticks);
     }
 
     private void startGameEndTimer() {
-        long ticks = GAME_END_SECONDS * 20L;
+        long ticks = Math.max(1L, gameEndSecondsRemaining) * 20L;
 
         gameEndTask = Bukkit.getScheduler().runTaskLater(plugin, () -> {
             gameEndTask = null;
@@ -193,16 +320,6 @@ public class GameManager {
 
             if (isActive() && gameEndSecondsRemaining > 0) {
                 gameEndSecondsRemaining--;
-
-                if (gameEndSecondsRemaining > 0 && gameEndSecondsRemaining % 86400L == 0L) {
-                    int restoredPlayers = heartManager.restoreAllTemporaryPveHearts();
-
-                    if (restoredPlayers > 0) {
-                        Bukkit.broadcastMessage("§aGlobal PvE-regeneration aktiverades. Alla temporärt förlorade PvE-hjärtan har återställts.");
-                    } else {
-                        Bukkit.broadcastMessage("§aGlobal PvE-regeneration aktiverades. Inga PvE-hjärtan behövde återställas.");
-                    }
-                }
             }
 
             if (gameState == GameState.RUNNING && canRunRevealCountdown()) {
@@ -215,6 +332,7 @@ public class GameManager {
             }
 
             updateTimerBossBar();
+            saveState();
         }, 20L, 20L);
     }
 
@@ -404,6 +522,8 @@ public class GameManager {
             freezePlayer(player);
             player.sendTitle("§6§lVINNARE", "§f" + winnerName, 10, 100, 20);
         }
+
+        saveState();
     }
 
     private void endGameNoWinner() {
@@ -418,6 +538,8 @@ public class GameManager {
             freezePlayer(player);
             player.sendTitle("§c§lGAME OVER", "§fIngen vinnare", 10, 100, 20);
         }
+
+        saveState();
     }
 
     public String getRevealDisplay() {
@@ -515,6 +637,7 @@ public class GameManager {
     public LobbyCageManager getLobbyCageManager() {
         return lobbyCageManager;
     }
+
     public int getSecondsUntilReveal() {
         return secondsUntilReveal;
     }
