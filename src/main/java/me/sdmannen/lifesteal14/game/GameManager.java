@@ -782,7 +782,7 @@ public class GameManager {
             return "Offline";
         }
 
-        return formatClock(secondsUntilReveal);
+        return formatLongTime(secondsUntilReveal);
     }
 
     public String getNextPveRegenDisplay() {
@@ -845,18 +845,43 @@ public class GameManager {
         return String.format("%02d:%02d", minutes, seconds);
     }
 
+//    private String formatLongTime(long totalSeconds) {
+//        long days = totalSeconds / 86400;
+//        long hours = (totalSeconds % 86400) / 3600;
+//        long minutes = (totalSeconds % 3600) / 60;
+//
+//        if (days > 0) {
+//            return days + "d " + hours + "h";
+//        }
+//
+//        return String.format("%02d:%02d", hours, minutes);
+//    }
     private String formatLongTime(long totalSeconds) {
-        long days = totalSeconds / 86400;
-        long hours = (totalSeconds % 86400) / 3600;
-        long minutes = (totalSeconds % 3600) / 60;
+        long clamped = Math.max(0L, totalSeconds);
 
+        long days = clamped / 86400;
+        long hours = (clamped % 86400) / 3600;
+        long minutes = (clamped % 3600) / 60;
+        long seconds = clamped % 60;
+
+        // Fall 1: Har dagar → visa D/H/M
         if (days > 0) {
-            return days + "d " + hours + "h";
+            return days + "d " + hours + "h " + minutes + "m";
         }
 
-        return String.format("%02d:%02d", hours, minutes);
-    }
+        // Fall 2: Har timmar → visa H/M/S
+        if (hours > 0) {
+            return hours + "h " + minutes + "m " + seconds + "s";
+        }
 
+        // Fall 3: Under 1 timme → visa M/S
+        if (minutes > 0) {
+            return minutes + "m " + seconds + "s";
+        }
+
+        // Fall 4: Bara sekunder
+        return seconds + "s";
+    }
     public GameState getGameState() {
         return gameState;
     }

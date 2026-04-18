@@ -32,7 +32,7 @@ public class LobbyCageManager {
 
         minX = centerX - 3;
         maxX = centerX + 3;
-        minY = floorY;
+        minY = floorY + 20;
         maxY = floorY + 4;
         minZ = centerZ - 3;
         maxZ = centerZ + 3;
